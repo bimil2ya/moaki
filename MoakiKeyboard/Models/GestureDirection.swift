@@ -11,15 +11,22 @@ enum GestureDirection: String, CaseIterable {
     case downLeft  // ↙
     case downRight // ↘
 
+    /// 벡터의 각도를 0..<360도 범위로 반환한다(iOS 좌표계는 y축이 아래로 증가하므로
+    /// `-dy`로 반전해서 계산). 방향 분류(`from(vector:threshold:)`)와, 이 각도값을
+    /// 직접 필요로 하는 다른 코드(예: Y계열 원점 복귀 인식기의 각도 오차 비교)가
+    /// 반드시 이 헬퍼 하나를 함께 호출해서, 두 계산이 서로 다른 좌표 변환으로
+    /// 미묘하게 어긋나는 일이 없게 한다.
+    static func angleDegrees(dx: CGFloat, dy: CGFloat) -> CGFloat {
+        let angle = atan2(-dy, dx) // Negative dy because iOS y-axis is inverted
+        let degrees = angle * 180 / .pi
+        return degrees < 0 ? degrees + 360 : degrees
+    }
+
     static func from(vector: CGVector, threshold: CGFloat = 20) -> GestureDirection? {
         let magnitude = sqrt(vector.dx * vector.dx + vector.dy * vector.dy)
         guard magnitude >= threshold else { return nil }
 
-        let angle = atan2(-vector.dy, vector.dx) // Negative dy because iOS y-axis is inverted
-        let degrees = angle * 180 / .pi
-
-        // Normalize to 0-360
-        let normalizedDegrees = degrees < 0 ? degrees + 360 : degrees
+        let normalizedDegrees = angleDegrees(dx: vector.dx, dy: vector.dy)
 
         // 8 directions with adjusted sectors (wider right-diagonals for ㅣ, ㅡ)
         switch normalizedDegrees {
@@ -68,17 +75,48 @@ enum GestureDirection: String, CaseIterable {
         !isCardinal
     }
 
+    /// The exact opposite direction (e.g. up <-> down, downRight <-> upLeft).
+    var opposite: GestureDirection {
+        switch self {
+        case .up: return .down
+        case .down: return .up
+        case .left: return .right
+        case .right: return .left
+        case .upLeft: return .downRight
+        case .downRight: return .upLeft
+        case .upRight: return .downLeft
+        case .downLeft: return .upRight
+        }
+    }
+
     /// Check if two directions are exactly opposite (e.g., up↔down, left↔right)
     func isOpposite(to other: GestureDirection) -> Bool {
-        switch (self, other) {
-        case (.up, .down), (.down, .up),
-             (.left, .right), (.right, .left),
-             (.upLeft, .downRight), (.downRight, .upLeft),
-             (.upRight, .downLeft), (.downLeft, .upRight):
-            return true
-        default:
-            return false
+        opposite == other
+    }
+
+    /// True when `self` is heading back toward `other` — either `other`'s exact
+    /// opposite, or one of the two directions adjacent to that exact opposite.
+    /// Real fingers rarely retrace the precise reverse angle, so reversal
+    /// detection (and the lower reversal threshold it unlocks) treats both as
+    /// "this is a reversal", not just the one exact angle.
+    /// - Parameter isFirstStroke: whether `other` is the gesture's very first
+    ///   recorded stroke. Only `.up` and `.down` as the *first* stroke are
+    ///   genuinely ambiguous (↑ branches into ㅚ/ㅛ vs ㅘ/ㅙ depending on
+    ///   whether the next stroke is ↓ or →; ↓ branches into ㅟ/ㅠ vs ㅝ/ㅞ the
+    ///   same way) — everywhere else in this app's vowel patterns, once you
+    ///   know `other`, there's only ever one meaningful stroke that can follow
+    ///   it, so any sufficiently-different stroke can only mean that one thing.
+    func isReversal(of other: GestureDirection, isFirstStroke: Bool) -> Bool {
+        let needsExactAngle = isFirstStroke && (other == .up || other == .down)
+        guard needsExactAngle else {
+            // Real fingers reverse at all kinds of angles, not just the precise
+            // 180° — accept anything that isn't basically still heading the
+            // original way (same direction, or adjacent to it).
+            return self != other && !isAdjacentTo(other)
         }
+
+        let trueOpposite = other.opposite
+        return self == trueOpposite || isAdjacentTo(trueOpposite)
     }
 
     /// Check if two directions are adjacent (e.g., up and upRight are adjacent)

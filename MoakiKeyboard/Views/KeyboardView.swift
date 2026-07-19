@@ -53,11 +53,23 @@ struct KeyboardView: View {
                         onToggleModePressed: {
                             viewModel.toggleMode()
                         },
-                        onCommaPressed: {
-                            viewModel.inputSymbol(",")
+                        onSnippetsPressed: {
+                            viewModel.showSnippetCandidates()
                         },
-                        onSpacePressed: {
-                            viewModel.inputSpace()
+                        onHanjaPressed: {
+                            viewModel.showHanjaCandidates()
+                        },
+                        onSpaceDragStart: { point in
+                            viewModel.beginSpacePress(at: point)
+                        },
+                        onSpaceDragMove: { point in
+                            viewModel.spacePressMoved(to: point)
+                        },
+                        onSpaceDragEnd: {
+                            viewModel.endSpacePress()
+                        },
+                        onPunctuationPressed: {
+                            viewModel.inputPunctuationCluster()
                         },
                         onReturnPressed: {
                             viewModel.inputReturn()
@@ -66,13 +78,41 @@ struct KeyboardView: View {
                 }
                 .padding(KeyboardMetrics.keySpacing)
 
-                // Gesture overlay (only shown when enabled and in Korean mode)
-                if settings.showGesturePreview && !viewModel.isSymbolMode {
+                // 제스처 방향 힌트는 설정으로 켠 경우에만, 천지인 대기 모음 미리보기는
+                // (드래그 방향 없이 previewVowel만 있는 경우) 설정과 무관하게 항상 보여준다.
+                let isCheonjiinPreview = viewModel.gestureDirections.isEmpty && viewModel.previewVowel != nil
+                if (settings.showGesturePreview || isCheonjiinPreview) && !viewModel.isSymbolMode {
                     GestureOverlayView(
                         directions: viewModel.gestureDirections,
                         startPoint: viewModel.gestureStartPoint,
                         currentVowel: viewModel.previewVowel
                     )
+                }
+
+                // 한자 후보 바 (커서 앞 음절에 대응하는 한자가 있을 때만 상단에 표시)
+                if !viewModel.hanjaCandidates.isEmpty {
+                    VStack(spacing: 0) {
+                        HanjaCandidateBar(
+                            candidates: viewModel.hanjaCandidates,
+                            onSelect: { candidate in
+                                viewModel.selectHanjaCandidate(candidate)
+                            }
+                        )
+                        Spacer()
+                    }
+                }
+
+                // 문구 후보 바 ("문구" 버튼을 탭했을 때 등록해둔 문구가 있으면 상단에 표시)
+                if !viewModel.snippetCandidates.isEmpty {
+                    VStack(spacing: 0) {
+                        SnippetCandidateBar(
+                            snippets: viewModel.snippetCandidates,
+                            onSelect: { snippet in
+                                viewModel.selectSnippetCandidate(snippet)
+                            }
+                        )
+                        Spacer()
+                    }
                 }
             }
             .background(Color(.systemGray6))
@@ -87,10 +127,20 @@ class KeyboardViewModel: ObservableObject {
     @Published var gestureDirections: [GestureDirection] = []
     @Published var gestureStartPoint: CGPoint?
     @Published var isSymbolMode: Bool = false
+    @Published var hanjaCandidates: [HanjaDictionary.Candidate] = []
+    @Published var snippetCandidates: [String] = []
 
     private let composer = HangulComposer()
     private let gestureAnalyzer = GestureAnalyzer()
     private let vowelResolver = VowelResolver()
+    private let cheonjiinResolver = CheonjiinResolver()
+
+    private var punctuationCycleIndex = 0
+    private let punctuationCycleValues = [".", ",", "?", "!"]
+
+    private var spacePressStartPoint: CGPoint?
+    private var isSpaceCursorMoveActive = false
+    private var lastSpaceCursorMoveX: CGFloat = 0
 
     /// Tracks the last composing text to enable incremental updates
     private var lastComposingText: String = ""
@@ -102,15 +152,36 @@ class KeyboardViewModel: ObservableObject {
     private var backspaceRepeatTimer: Timer?
     private var didHandleLongPressNumberInCurrentGesture = false
 
+    /// 마지막 천지인 스트로크 이후 이 시간 동안 다음 스트로크가 없으면 대기 중인
+    /// 모음을 자동으로 확정한다. 실제 천지인 키패드처럼, ㅏ(ㅣㆍ)나 ㅑ(ㅣㆍㆍ)처럼
+    /// 서로 앞부분이 겹치는 모음을 시간차로 구분하기 위함이다.
+    private let cheonjiinAutoCommitDelay: TimeInterval
+    private var cheonjiinAutoCommitTimer: Timer?
+
+    /// Y계열(ㅑㅕㅛㅠ) 원점 복귀 인식기(실험적 기능) 토글. 실제 설정을 기본값으로 읽되,
+    /// 테스트에서는 고정 클로저를 주입해 UserDefaults/앱그룹 없이 ON/OFF를 검증한다.
+    private let experimentalYVowelEnabledProvider: () -> Bool
+    /// 제스처 시작 시점에 한 번만 캐시한다 — 미리보기와 최종 확정이 서로 다른 시점에
+    /// 토글을 다시 읽어 어긋나는 일이 없도록, 한 제스처 내내 이 값만 참조한다.
+    private var isExperimentalYVowelEnabledForCurrentGesture = false
+
     weak var delegate: KeyboardViewModelDelegate?
 
-    init(backspaceRepeatInitialDelay: TimeInterval = 0.4, backspaceRepeatInterval: TimeInterval = 0.08) {
+    init(
+        backspaceRepeatInitialDelay: TimeInterval = 0.4,
+        backspaceRepeatInterval: TimeInterval = 0.08,
+        cheonjiinAutoCommitDelay: TimeInterval = 0.45,
+        experimentalYVowelEnabledProvider: @escaping () -> Bool = { ExperimentalYVowelSettings.isEnabled() }
+    ) {
         self.backspaceRepeatInitialDelay = backspaceRepeatInitialDelay
         self.backspaceRepeatInterval = backspaceRepeatInterval
+        self.cheonjiinAutoCommitDelay = cheonjiinAutoCommitDelay
+        self.experimentalYVowelEnabledProvider = experimentalYVowelEnabledProvider
     }
 
     deinit {
         stopBackspaceRepeat()
+        cheonjiinAutoCommitTimer?.invalidate()
     }
 
     var composingText: String {
@@ -120,6 +191,9 @@ class KeyboardViewModel: ObservableObject {
     // MARK: - Mode Toggle
 
     func toggleMode() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         stopBackspaceRepeat()
         commitCurrent()
         isSymbolMode.toggle()
@@ -129,6 +203,9 @@ class KeyboardViewModel: ObservableObject {
     // MARK: - Input Methods
 
     func inputConsonant(_ consonant: Choseong) {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         let action = composer.inputChoseong(consonant)
         handleComposerAction(action)
         triggerHapticFeedback()
@@ -140,24 +217,75 @@ class KeyboardViewModel: ObservableObject {
         triggerHapticFeedback()
     }
 
+    /// 천지인 ㅣㅡㆍ 스트로크 입력. 버퍼가 더 확장될 수 있으면 대기하고,
+    /// 확장이 막혀 모음이 확정되면 기존 `inputVowel` 경로로 그대로 넘긴다.
+    func inputCheonjiinStroke(_ stroke: CheonjiinStroke) {
+        dismissCandidateBars()
+        let committedVowel = cheonjiinResolver.input(stroke)
+        cheonjiinAutoCommitTimer?.invalidate()
+        cheonjiinAutoCommitTimer = nil
+
+        if let committedVowel {
+            resetPunctuationCycle()
+            inputVowel(committedVowel)
+        } else {
+            triggerHapticFeedback()
+        }
+
+        // 확정 스트로크가 곧바로 새 버퍼를 시작시켰을 수도 있으므로(예: ㅑ를 확정시킨
+        // ㅡ가 그대로 새 ㅡ 버퍼로 이어짐), 커밋 여부와 무관하게 현재 대기 상태를 다시 확인한다.
+        if cheonjiinResolver.pendingVowel != nil {
+            previewVowel = cheonjiinResolver.pendingVowel
+            scheduleCheonjiinAutoCommit()
+        } else {
+            previewVowel = nil
+            gestureStartPoint = nil
+        }
+    }
+
+    private func scheduleCheonjiinAutoCommit() {
+        cheonjiinAutoCommitTimer?.invalidate()
+        cheonjiinAutoCommitTimer = makeTimer(interval: cheonjiinAutoCommitDelay, repeats: false) { [weak self] _ in
+            self?.flushPendingCheonjiin()
+        }
+    }
+
+    /// 우측 하단에 통합된 문장부호 키. 탭할 때마다 . , ? ! 순서로 순환 입력한다.
+    func inputPunctuationCluster() {
+        let symbol = punctuationCycleValues[punctuationCycleIndex]
+        punctuationCycleIndex = (punctuationCycleIndex + 1) % punctuationCycleValues.count
+        inputSymbol(symbol)
+    }
+
     func inputSymbol(_ symbol: String) {
+        flushPendingCheonjiin()
+        dismissCandidateBars()
         commitCurrent()
         delegate?.insertText(symbol)
         triggerHapticFeedback()
     }
 
     func inputNumber(_ number: String) {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         commitCurrent()
         delegate?.insertText(number)
         triggerHapticFeedback()
     }
 
+    /// 자음 키 롱프레스로 확정된 값을 그대로 입력한다. 이름은 숫자 롱프레스에서
+    /// 왔지만, ㅋㅌㅊㅍ의 사용자 지정 문구(`SnippetSettings`)도 같은 경로로 들어온다 —
+    /// 둘 다 "롱프레스로 확정된 문자열을 그대로 삽입"이라는 동작이 동일하기 때문이다.
     func inputLongPressNumber(_ number: String) {
         didHandleLongPressNumberInCurrentGesture = true
         inputNumber(number)
     }
 
     func deleteBackward() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         let action = composer.deleteBackward()
         if action == .none {
             delegate?.deleteBackward()
@@ -168,19 +296,122 @@ class KeyboardViewModel: ObservableObject {
     }
 
     func inputSpace() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         commitAndInsert(" ")
         triggerHapticFeedback()
     }
 
     func inputReturn() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        dismissCandidateBars()
         commitAndInsert("\n")
         triggerHapticFeedback()
     }
 
-    func switchKeyboard() {
-        stopBackspaceRepeat()
+    // MARK: - Space Bar Cursor Move (트랙패드)
+
+    /// 스페이스 키를 누른 지점을 기록한다. 아직 스페이스를 입력하지도, 커서 이동
+    /// 모드로 전환하지도 않는다 — 손가락이 실제로 움직여야 결정된다.
+    func beginSpacePress(at point: CGPoint) {
+        spacePressStartPoint = point
+        isSpaceCursorMoveActive = false
+    }
+
+    /// 스페이스 키 위에서 손가락이 움직일 때마다 호출된다.
+    /// 데드존을 넘는 순간 커서 이동 모드로 전환하고(조합 중이던 글자를 먼저 확정),
+    /// 이후에는 이동 거리를 일정 간격으로 나눠 커서를 한 글자씩 옮긴다.
+    func spacePressMoved(to point: CGPoint) {
+        guard let start = spacePressStartPoint else { return }
+
+        if !isSpaceCursorMoveActive {
+            guard abs(point.x - start.x) >= KeyboardMetrics.spaceCursorMoveDeadzone else { return }
+            isSpaceCursorMoveActive = true
+            lastSpaceCursorMoveX = point.x
+            // 커서를 옮기기 전에 조합/대기 중인 상태를 전부 확정해서,
+            // 화면 밖에서 지우고-다시-쓰는 조합 시뮬레이션이 엉뚱한 위치를 건드리지 않게 한다.
+            flushPendingCheonjiin()
+            resetPunctuationCycle()
+            dismissCandidateBars()
+            commitCurrent()
+            triggerHapticFeedback()
+            return
+        }
+
+        var dx = point.x - lastSpaceCursorMoveX
+        while abs(dx) >= KeyboardMetrics.spaceCursorMoveStep {
+            let direction = dx > 0 ? 1 : -1
+            delegate?.moveCursor(byCharacterOffset: direction)
+            lastSpaceCursorMoveX += CGFloat(direction) * KeyboardMetrics.spaceCursorMoveStep
+            dx = point.x - lastSpaceCursorMoveX
+        }
+    }
+
+    /// 스페이스 키에서 손을 뗀다. 커서 이동 모드로 전환된 적이 없다면(단순 탭이었다면)
+    /// 그제서야 스페이스를 입력한다.
+    func endSpacePress() {
+        let wasCursorMove = isSpaceCursorMoveActive
+        spacePressStartPoint = nil
+        isSpaceCursorMoveActive = false
+
+        if !wasCursorMove {
+            inputSpace()
+        }
+    }
+
+    // MARK: - Hanja
+
+    /// 한자 버튼을 탭했을 때 호출된다. 커서 바로 앞 글자를 확인해 후보를 찾는다.
+    func showHanjaCandidates() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
         commitCurrent()
-        delegate?.switchToNextKeyboard()
+        snippetCandidates = [] // 두 후보 바를 동시에 보여주지 않는다.
+
+        guard let syllable = delegate?.characterBeforeCursor() else {
+            hanjaCandidates = []
+            return
+        }
+
+        let candidates = HanjaDictionary.shared.candidates(for: syllable)
+        hanjaCandidates = candidates
+        triggerHapticFeedback()
+    }
+
+    /// 후보 중 하나를 선택하면 커서 앞 음절을 지우고 그 자리에 한자를 넣는다.
+    func selectHanjaCandidate(_ candidate: HanjaDictionary.Candidate) {
+        hanjaCandidates = []
+        delegate?.deleteBackward()
+        delegate?.insertText(String(candidate.hanja))
+        triggerHapticFeedback()
+    }
+
+    // MARK: - Snippets
+
+    /// "문구" 버튼을 탭했을 때 호출된다. 등록해둔 문구 전체를 후보로 보여준다.
+    func showSnippetCandidates() {
+        flushPendingCheonjiin()
+        resetPunctuationCycle()
+        commitCurrent()
+        hanjaCandidates = [] // 두 후보 바를 동시에 보여주지 않는다.
+
+        snippetCandidates = SnippetSettings.allSnippets()
+        triggerHapticFeedback()
+    }
+
+    /// 후보 중 하나를 선택하면 그 문구를 커서 위치에 그대로 삽입한다.
+    func selectSnippetCandidate(_ text: String) {
+        snippetCandidates = []
+        commitCurrent()
+        delegate?.insertText(text)
+        triggerHapticFeedback()
+    }
+
+    private func dismissCandidateBars() {
+        hanjaCandidates = []
+        snippetCandidates = []
     }
 
     func beginBackspacePress() {
@@ -205,6 +436,7 @@ class KeyboardViewModel: ObservableObject {
         gestureAnalyzer.addPoint(point)
         gestureDirections = []
         previewVowel = nil
+        isExperimentalYVowelEnabledForCurrentGesture = experimentalYVowelEnabledProvider()
     }
 
     func gestureMoved(to point: CGPoint) {
@@ -213,7 +445,17 @@ class KeyboardViewModel: ObservableObject {
         gestureDirections = directions
 
         // Update preview vowel (only meaningful for consonant keys)
-        previewVowel = vowelResolver.peekVowel(directions: directions)
+        previewVowel = experimentalOverriddenPreviewVowel(existingPreview: vowelResolver.peekVowel(directions: directions))
+    }
+
+    /// 토글이 켜져 있고 Y계열 후보가 확정됐으면 그 값으로 미리보기를 덮어쓴다.
+    /// 드래그 중 여러 번 호출되므로 부작용(카운터·로그)은 절대 여기 두지 않는다.
+    private func experimentalOverriddenPreviewVowel(existingPreview: Jungseong?) -> Jungseong? {
+        guard isExperimentalYVowelEnabledForCurrentGesture,
+              let confirmed = gestureAnalyzer.confirmedYVowel else {
+            return existingPreview
+        }
+        return confirmed
     }
 
     func gestureEnded(row: Int, column: Int) {
@@ -241,7 +483,7 @@ class KeyboardViewModel: ObservableObject {
             inputSymbol(symbol)
         case .backspace:
             deleteBackward()
-        case .consonant:
+        case .consonant, .cheonjiinStroke:
             break // Should not happen in symbol mode
         }
     }
@@ -261,7 +503,17 @@ class KeyboardViewModel: ObservableObject {
                 inputConsonant(consonant)
 
                 let resolution = vowelResolver.resolve(directions: directions)
-                if let vowel = resolution.vowel {
+                let decision = finalYVowelDecision(existingResolution: resolution.vowel)
+                if decision.wasExperimentalApplied {
+                    // 실제 입력이 확정되는 이 지점에서만, 제스처당 정확히 1회 기록한다.
+                    #if DEBUG
+                    if decision.wasConflictOverride {
+                        print("[ExperimentalYVowel] 충돌 발생 — 기존: \(String(describing: resolution.vowel)), 신규: \(String(describing: decision.vowel))")
+                    }
+                    #endif
+                    ExperimentalYVowelSettings.recordApplied(wasConflictOverride: decision.wasConflictOverride)
+                }
+                if let vowel = decision.vowel {
                     inputVowel(vowel)
                 }
             }
@@ -271,7 +523,33 @@ class KeyboardViewModel: ObservableObject {
 
         case .backspace:
             deleteBackward()
+
+        case .cheonjiinStroke(let stroke):
+            inputCheonjiinStroke(stroke)
         }
+    }
+
+    // MARK: - Y계열(ㅑㅕㅛㅠ) 원점 복귀 인식기 — 최종 결정 (실험적 기능)
+
+    private struct YVowelDecision {
+        let vowel: Jungseong?
+        let wasExperimentalApplied: Bool
+        let wasConflictOverride: Bool
+    }
+
+    /// 부작용 없는 순수 함수 — 카운터·로그 기록은 호출부(`handleKoreanModeGesture`,
+    /// 제스처당 정확히 1회 호출됨)에서만 한다. 이렇게 분리해두면 이 함수 자체가
+    /// 나중에 여러 번 호출되더라도(예: 테스트, 추측 실행) 조용히 중복 집계되는 일이 없다.
+    private func finalYVowelDecision(existingResolution: Jungseong?) -> YVowelDecision {
+        guard isExperimentalYVowelEnabledForCurrentGesture,
+              let confirmed = gestureAnalyzer.confirmedYVowel else {
+            return YVowelDecision(vowel: existingResolution, wasExperimentalApplied: false, wasConflictOverride: false)
+        }
+        return YVowelDecision(
+            vowel: confirmed,
+            wasExperimentalApplied: true,
+            wasConflictOverride: confirmed != existingResolution
+        )
     }
 
     // MARK: - Public State Reset (for external text field changes)
@@ -280,8 +558,14 @@ class KeyboardViewModel: ObservableObject {
         // Reset composer state when text field changes externally
         // (e.g., when user sends a message and the app clears the field)
         stopBackspaceRepeat()
+        cheonjiinAutoCommitTimer?.invalidate()
+        cheonjiinAutoCommitTimer = nil
         lastComposingText = ""
         composer.reset()
+        cheonjiinResolver.reset()
+        previewVowel = nil
+        resetPunctuationCycle()
+        dismissCandidateBars()
     }
 
     /// Resets gesture tracking state only. Intentionally does NOT reset composer
@@ -290,13 +574,38 @@ class KeyboardViewModel: ObservableObject {
         stopBackspaceRepeat()
         didHandleLongPressNumberInCurrentGesture = false
         activeKey = nil
-        gestureStartPoint = nil
         gestureDirections = []
-        previewVowel = nil
+        // 천지인 버퍼가 아직 대기 중이면(손을 뗀 뒤에도 다음 스트로크를 기다리는 중),
+        // 미리보기와 그 위치 기준점을 지우지 않고 유지해서 탭 사이에도 계속 보이게 한다.
+        if cheonjiinResolver.pendingVowel == nil {
+            gestureStartPoint = nil
+            previewVowel = nil
+        }
         gestureAnalyzer.reset()
+        // 정상 종료뿐 아니라 키보드 전환·뷰 소멸·시스템 제스처 취소 등 이 catch-all
+        // 리셋 경로를 거치는 모든 경우에, 실험 토글 캐시도 함께 정리해서 취소된
+        // 제스처의 잔여 상태가 다음 제스처로 새지 않게 한다.
+        isExperimentalYVowelEnabledForCurrentGesture = false
     }
 
     // MARK: - Private Helpers
+
+    /// 천지인 버퍼에 확정 대기 중인 모음이 있으면 확정해서 흘려보낸다.
+    /// 천지인 스트로크가 아닌 다른 입력(자음, 기호, 삭제, 스페이스 등)이 들어오기
+    /// 직전에 호출해서, 미완성 상태로 남은 모음이 유실되지 않게 한다.
+    private func flushPendingCheonjiin() {
+        cheonjiinAutoCommitTimer?.invalidate()
+        cheonjiinAutoCommitTimer = nil
+        if let vowel = cheonjiinResolver.flush() {
+            previewVowel = nil
+            gestureStartPoint = nil
+            inputVowel(vowel)
+        }
+    }
+
+    private func resetPunctuationCycle() {
+        punctuationCycleIndex = 0
+    }
 
     private func handleComposerAction(_ action: HangulComposer.ComposerAction) {
         switch action {
@@ -392,6 +701,8 @@ protocol KeyboardViewModelDelegate: AnyObject {
     func updateComposingText(from previous: String, to current: String)
     func switchToNextKeyboard()
     func triggerHapticFeedback()
+    func moveCursor(byCharacterOffset offset: Int)
+    func characterBeforeCursor() -> Character?
 }
 
 #Preview {

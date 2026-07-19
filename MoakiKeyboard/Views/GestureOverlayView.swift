@@ -7,13 +7,17 @@ struct GestureOverlayView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            if let start = startPoint, !directions.isEmpty {
+            // 드래그 제스처(방향이 있음) 또는 천지인 탭(방향 없이 대기 중인 모음만 있음)
+            // 둘 중 하나라도 보여줄 내용이 있으면 그린다.
+            if let start = startPoint, !directions.isEmpty || currentVowel != nil {
                 ZStack {
                     // Direction indicator text
                     VStack(spacing: 4) {
-                        Text(directions.map { $0.symbol }.joined())
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.blue)
+                        if !directions.isEmpty {
+                            Text(directions.map { $0.symbol }.joined())
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(.blue)
+                        }
 
                         if let vowel = currentVowel {
                             Text(String(vowel.compatibilityCharacter))

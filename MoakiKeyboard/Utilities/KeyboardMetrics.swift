@@ -6,6 +6,7 @@ enum KeyContent: Equatable {
     case consonant(Choseong)
     case symbol(String)
     case backspace
+    case cheonjiinStroke(CheonjiinStroke)
 }
 
 enum KeyboardMetrics {
@@ -16,6 +17,7 @@ enum KeyboardMetrics {
     // Key sizing
     static let keySpacing: CGFloat = 4
     static let keyCornerRadius: CGFloat = 8
+	static let minimumInteractiveKeyWidth: CGFloat = 44
 
     // Width ratio for side symbol keys (relative to center keys)
     static let symbolWidthRatio: CGFloat = 0.35
@@ -26,11 +28,26 @@ enum KeyboardMetrics {
     // Function row
     static let functionRowHeight: CGFloat = 44
 
-    // Gesture thresholds
-    static let gestureThreshold: CGFloat = 20        // Minimum distance to register direction
-    static let reversalThreshold: CGFloat = 10       // Lower threshold for opposite direction reversals
-    static let directionChangeThreshold: CGFloat = 15 // Distance before direction can change
+    // Gesture thresholds (base values, in points). 사용자가 설정에서 조절하는
+    // 배율(GestureSensitivitySettings)이 곱해져서 실제 값이 된다.
+    private static let baseGestureThreshold: CGFloat = 20        // Minimum distance to register direction
+    private static let baseReversalThreshold: CGFloat = 10       // Lower threshold for opposite direction reversals
+    private static let baseDirectionChangeThreshold: CGFloat = 15 // Distance before direction can change
+
+    static var gestureThreshold: CGFloat {
+        baseGestureThreshold * GestureSensitivitySettings.multiplier()
+    }
+    static var reversalThreshold: CGFloat {
+        baseReversalThreshold * GestureSensitivitySettings.multiplier()
+    }
+    static var directionChangeThreshold: CGFloat {
+        baseDirectionChangeThreshold * GestureSensitivitySettings.multiplier()
+    }
     static let gestureTimeout: TimeInterval = 0.5    // Max time between direction changes
+
+    // Space bar cursor-move (트랙패드) thresholds
+    static let spaceCursorMoveDeadzone: CGFloat = 12  // 이 이상 드래그해야 스페이스 대신 커서 이동 모드로 전환
+    static let spaceCursorMoveStep: CGFloat = 10      // 이 거리(pt)마다 커서가 한 글자씩 이동
 
     // Calculate action key width (backspace/return) based on total width
     static func actionKeyWidth(for totalWidth: CGFloat) -> CGFloat {
@@ -41,8 +58,8 @@ enum KeyboardMetrics {
     // Row 0-2: side*2 + center*5 = 0.35*2 + 5 = 5.7 units
     static func centerKeyWidth(for totalWidth: CGFloat) -> CGFloat {
         let spacing = keySpacing * 8  // 8 gaps for 7 columns + edges
-        let availableWidth = totalWidth - spacing
-        return availableWidth / (symbolWidthRatio * 2 + 5)
+        let availableWidth = totalWidth - spacing - minimumInteractiveKeyWidth * 2
+        return availableWidth / 5
     }
 
     // Calculate key height based on available space
@@ -52,14 +69,15 @@ enum KeyboardMetrics {
     }
 
     // Get key width for specific column and row
-    static func keyWidth(for column: Int, row: Int, centerKeyWidth: CGFloat) -> CGFloat {
-        let sideWidth = centerKeyWidth * symbolWidthRatio
+    static func keyWidth(for column: Int, row: Int, centerKeyWidth: CGFloat, isSymbolMode: Bool) -> CGFloat {
+        let sideWidth = minimumInteractiveKeyWidth
 
-        // Row 3: backspace (col 5) fills remaining space to match row 0-2 width
+        // Symbol mode row 3 only has 6 columns: backspace (col 5) fills remaining
+        // space to match row 0-2 width.
         // Row 0-2 width: 2*sideWidth + 5*centerKeyWidth + 6*spacing
         // Row 3 without backspace: sideWidth + 4*centerKeyWidth + 5*spacing
         // backspaceWidth = sideWidth + centerKeyWidth + spacing
-        if row == 3 && column == 5 {
+        if isSymbolMode && row == 3 && column == 5 {
             return sideWidth + centerKeyWidth + keySpacing
         }
 
@@ -85,14 +103,16 @@ enum KeyboardMetrics {
         return CGSize(width: keyWidth, height: keyHeightValue)
     }
 
-    // Korean mode layout (7 columns for rows 0-2, 6 columns for row 3)
-    // Left column: special symbols, Center: consonants, Right column: symbols
-    // Row 3: backspace expands to fill remaining space
+    // Korean mode layout: 7 columns on every row.
+    // Left column: special symbols, Center: consonants.
+    // Row 0 right column: 기호(#) / Row 1 right column: backspace (우측 상단으로 이동)
+    // Row 2 right column: ㅣ / Row 3 우측 두 칸: ㅡ, ㆍ (천지인 스트로크)
+    // 통합 문장부호 키는 그리드가 아니라 기능 행(스페이스바 옆)에 있다 (FunctionRowView 참고).
     static let koreanLayout: [[KeyContent]] = [
-        [.symbol("~"), .consonant(.ㅃ), .consonant(.ㅉ), .consonant(.ㄸ), .consonant(.ㄲ), .consonant(.ㅆ), .symbol("!")],
-        [.symbol("^"), .consonant(.ㅂ), .consonant(.ㅈ), .consonant(.ㄷ), .consonant(.ㄱ), .consonant(.ㅅ), .symbol("?")],
-        [.symbol(";"), .consonant(.ㅁ), .consonant(.ㄴ), .consonant(.ㅇ), .consonant(.ㄹ), .consonant(.ㅎ), .symbol(".")],
-        [.symbol("*"), .consonant(.ㅋ), .consonant(.ㅌ), .consonant(.ㅊ), .consonant(.ㅍ), .backspace],  // 6 columns
+        [.symbol("~"), .consonant(.ㅃ), .consonant(.ㅉ), .consonant(.ㄸ), .consonant(.ㄲ), .consonant(.ㅆ), .symbol("#")],
+        [.symbol("^"), .consonant(.ㅂ), .consonant(.ㅈ), .consonant(.ㄷ), .consonant(.ㄱ), .consonant(.ㅅ), .backspace],
+        [.symbol(";"), .consonant(.ㅁ), .consonant(.ㄴ), .consonant(.ㅇ), .consonant(.ㄹ), .consonant(.ㅎ), .cheonjiinStroke(.i)],
+        [.symbol("*"), .consonant(.ㅋ), .consonant(.ㅌ), .consonant(.ㅊ), .consonant(.ㅍ), .cheonjiinStroke(.eu), .cheonjiinStroke(.dot)],
     ]
 
     // Symbol mode layout.
@@ -117,7 +137,7 @@ enum KeyboardMetrics {
         [nil, nil, nil, nil, nil, nil, nil],  // row 0 (쌍자음 - no numbers)
         [nil, "1", "2", "3", "4", "5", nil],  // row 1 (ㅂㅈㄷㄱㅅ)
         [nil, "6", "7", "8", "9", "0", nil],  // row 2 (ㅁㄴㅇㄹㅎ)
-        [nil, nil, nil, nil, nil, nil],       // row 3 (ㅋㅌㅊㅍ + backspace) - 6 columns
+        [nil, nil, nil, nil, nil, nil, nil],  // row 3 (ㅋㅌㅊㅍ + ㅡ + backspace)
     ]
 
     // Get key content at grid position for given mode
