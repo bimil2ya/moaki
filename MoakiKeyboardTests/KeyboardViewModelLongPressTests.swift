@@ -421,6 +421,51 @@ final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
     }
 }
 
+/// VoiceOver 접근성 모음 선택 경로(드래그 제스처를 전혀 거치지 않는 별도 입력)가
+/// 기존 inputConsonant/inputVowel을 그대로 재사용해 올바른 음절을 조합하는지 확인한다.
+final class KeyboardViewModelAccessibilityVowelTests: XCTestCase {
+    private var viewModel: KeyboardViewModel!
+    private var delegate: SpyKeyboardDelegate!
+
+    override func setUp() {
+        super.setUp()
+        viewModel = KeyboardViewModel()
+        delegate = SpyKeyboardDelegate()
+        viewModel.delegate = delegate
+    }
+
+    override func tearDown() {
+        viewModel = nil
+        delegate = nil
+        super.tearDown()
+    }
+
+    func testAccessibilityPathComposesConsonantAndVowelWithoutGesture() {
+        viewModel.inputConsonantAndVowelForAccessibility(.ㄱ, vowel: .ㅏ)
+        XCTAssertEqual(delegate.composingUpdates.last?.current, "가")
+    }
+
+    func testAccessibilityPathWorksForYVowelsTooWithoutAnyGesture() {
+        viewModel.inputConsonantAndVowelForAccessibility(.ㅂ, vowel: .ㅑ)
+        XCTAssertEqual(delegate.composingUpdates.last?.current, "뱌")
+    }
+
+    /// 접근성 경로가 gestureAnalyzer/gestureDirections 등 기존 드래그 상태를 전혀
+    /// 건드리지 않는지 확인 — 호출 전후로 진행 중이던 제스처 관련 published 상태가
+    /// 그대로 유지되어야 한다.
+    func testAccessibilityPathDoesNotDisturbInProgressGestureState() {
+        viewModel.gestureStarted(row: 1, column: 1, at: CGPoint(x: 0, y: 0))
+        viewModel.gestureMoved(to: CGPoint(x: 10, y: 0))
+        let activeKeyBefore = viewModel.activeKey?.row
+        let gestureStartBefore = viewModel.gestureStartPoint
+
+        viewModel.inputConsonantAndVowelForAccessibility(.ㄴ, vowel: .ㅓ)
+
+        XCTAssertEqual(viewModel.activeKey?.row, activeKeyBefore)
+        XCTAssertEqual(viewModel.gestureStartPoint, gestureStartBefore)
+    }
+}
+
 private final class SpyKeyboardDelegate: KeyboardViewModelDelegate {
     struct ComposingUpdate: Equatable {
         let previous: String

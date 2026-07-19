@@ -43,6 +43,9 @@ struct KeyboardView: View {
                         },
                         onGestureEnd: { row, column in
                             viewModel.gestureEnded(row: row, column: column)
+                        },
+                        onAccessibilityVowelSelected: { consonant, vowel in
+                            viewModel.inputConsonantAndVowelForAccessibility(consonant, vowel: vowel)
                         }
                     )
 
@@ -215,6 +218,14 @@ class KeyboardViewModel: ObservableObject {
         let action = composer.inputJungseong(vowel)
         handleComposerAction(action)
         triggerHapticFeedback()
+    }
+
+    /// VoiceOver의 접근성 모음 선택 화면(AccessibilityVowelPickerView)에서 호출된다.
+    /// 드래그 제스처를 전혀 거치지 않고 기존 inputConsonant/inputVowel 경로를 그대로
+    /// 재사용해 자음+모음을 조합한다 — 새 조합 로직을 만들지 않는다.
+    func inputConsonantAndVowelForAccessibility(_ consonant: Choseong, vowel: Jungseong) {
+        inputConsonant(consonant)
+        inputVowel(vowel)
     }
 
     /// 천지인 ㅣㅡㆍ 스트로크 입력. 버퍼가 더 확장될 수 있으면 대기하고,

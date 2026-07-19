@@ -22,6 +22,8 @@ struct KeyView: View {
     let onGestureStart: (CGPoint) -> Void
     let onGestureMove: (CGPoint) -> Void
     let onGestureEnd: () -> Void
+    /// VoiceOver 전용 접근성 모음 선택 경로. 기존 드래그 제스처는 전혀 바꾸지 않는다.
+    let onAccessibilityVowelSelected: ((Jungseong) -> Void)?
 
     init(
         content: KeyContent,
@@ -35,7 +37,8 @@ struct KeyView: View {
         onBackspacePressEnd: (() -> Void)?,
         onGestureStart: @escaping (CGPoint) -> Void,
         onGestureMove: @escaping (CGPoint) -> Void,
-        onGestureEnd: @escaping () -> Void
+        onGestureEnd: @escaping () -> Void,
+        onAccessibilityVowelSelected: ((Jungseong) -> Void)? = nil
     ) {
         self.content = content
         self.keySize = keySize
@@ -49,6 +52,7 @@ struct KeyView: View {
         self.onGestureStart = onGestureStart
         self.onGestureMove = onGestureMove
         self.onGestureEnd = onGestureEnd
+        self.onAccessibilityVowelSelected = onAccessibilityVowelSelected
     }
 
     @State private var isHighlighted = false
@@ -56,6 +60,7 @@ struct KeyView: View {
     @State private var longPressTimer: Timer?
     @State private var isShowingDirectionalPopup = false
     @State private var highlightedDirectionSymbol: String?
+    @State private var isShowingAccessibilityVowelPicker = false
 
     /// 이 거리 이상 움직여야 방향이 "골라졌다"고 본다 (가운데 죽은 영역).
     private let directionalSelectDeadzone: CGFloat = 16
@@ -79,6 +84,20 @@ struct KeyView: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
             activateForAccessibility()
+        }
+        .accessibilityActions {
+            if case .consonant = content {
+                Button("모음 선택하여 입력") {
+                    isShowingAccessibilityVowelPicker = true
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingAccessibilityVowelPicker) {
+            if case .consonant(let consonant) = content {
+                AccessibilityVowelPickerView(consonant: consonant) { vowel in
+                    onAccessibilityVowelSelected?(vowel)
+                }
+            }
         }
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -263,8 +282,8 @@ struct KeyView: View {
 		switch content {
 		case .consonant:
 			return longPressNumber == nil
-				? "두 번 탭하여 자음을 입력합니다. 모음은 천지인 키로 입력할 수 있습니다"
-				: "두 번 탭하여 자음을 입력합니다. 길게 누르면 등록한 숫자 또는 문구를 입력합니다"
+				? "두 번 탭하여 자음을 입력합니다. 모음은 천지인 키로 입력하거나, 활동 로터에서 모음 선택하여 입력을 고르세요"
+				: "두 번 탭하여 자음을 입력합니다. 길게 누르면 등록한 숫자 또는 문구를 입력합니다. 활동 로터에서 모음 선택하여 입력을 고를 수도 있습니다"
 		case .symbol:
 			return "두 번 탭하여 기호를 입력합니다"
 		case .backspace:
