@@ -16,7 +16,10 @@ enum GestureSensitivitySettings {
     static let defaultMultiplier: Double = 1.0
 
     static func multiplier() -> CGFloat {
-        let defaults = UserDefaults(suiteName: appGroupID)
+        multiplier(defaults: UserDefaults(suiteName: appGroupID))
+    }
+
+    static func multiplier(defaults: UserDefaults?) -> CGFloat {
         let stored = defaults?.object(forKey: multiplierKey) as? Double
         let value = stored ?? defaultMultiplier
         return CGFloat(value.clamped(to: multiplierRange))

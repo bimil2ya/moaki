@@ -18,26 +18,15 @@ final class AppGroupConstantsTests: XCTestCase {
         XCTAssertEqual(ExperimentalYVowelSettings.conflictOverrideCountKey, "experimentalYVowelConflictOverrideCount")
     }
 
-    func testExperimentalYVowelDefaultsToDisabledAndZeroCounts() {
-        // 이 테스트는 앱그룹 UserDefaults suite에 값이 없는 초기 상태를 가정한다.
-        // 실제 값이 저장돼 있었다면 isEnabled()/count는 그 값을 그대로 반영하므로,
-        // 여기서는 "키가 없을 때 기본값"이라는 기본 계약만 별도로 확인한다.
-        let suite = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        let previousEnabled = suite?.object(forKey: ExperimentalYVowelSettings.enabledKey)
-        let previousApplied = suite?.object(forKey: ExperimentalYVowelSettings.appliedCountKey)
-        let previousConflict = suite?.object(forKey: ExperimentalYVowelSettings.conflictOverrideCountKey)
-        defer {
-            suite?.set(previousEnabled, forKey: ExperimentalYVowelSettings.enabledKey)
-            suite?.set(previousApplied, forKey: ExperimentalYVowelSettings.appliedCountKey)
-            suite?.set(previousConflict, forKey: ExperimentalYVowelSettings.conflictOverrideCountKey)
-        }
+    func testExperimentalYVowelDefaultsToDisabledAndZeroCounts() throws {
+        // 임시 suite를 주입해 실제 App Group에는 전혀 손대지 않고 "키가 없을 때
+        // 기본값" 계약만 확인한다.
+        let suiteName = "test-\(UUID().uuidString)"
+        let suite = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
 
-        suite?.removeObject(forKey: ExperimentalYVowelSettings.enabledKey)
-        suite?.removeObject(forKey: ExperimentalYVowelSettings.appliedCountKey)
-        suite?.removeObject(forKey: ExperimentalYVowelSettings.conflictOverrideCountKey)
-
-        XCTAssertFalse(ExperimentalYVowelSettings.isEnabled())
-        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(), 0)
-        XCTAssertEqual(ExperimentalYVowelSettings.conflictOverrideCount(), 0)
+        XCTAssertFalse(ExperimentalYVowelSettings.isEnabled(defaults: suite))
+        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(defaults: suite), 0)
+        XCTAssertEqual(ExperimentalYVowelSettings.conflictOverrideCount(defaults: suite), 0)
     }
 }

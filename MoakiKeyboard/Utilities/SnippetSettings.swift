@@ -22,8 +22,12 @@ enum SnippetSettings {
 
     /// 등록된 문구가 없으면(빈 문자열 포함) nil을 반환한다.
     static func snippet(for consonant: Choseong) -> String? {
+        snippet(for: consonant, defaults: UserDefaults(suiteName: appGroupID))
+    }
+
+    static func snippet(for consonant: Choseong, defaults: UserDefaults?) -> String? {
         guard let key = userDefaultsKey(for: consonant),
-              let text = UserDefaults(suiteName: appGroupID)?.string(forKey: key),
+              let text = defaults?.string(forKey: key),
               !text.isEmpty else {
             return nil
         }
@@ -32,13 +36,21 @@ enum SnippetSettings {
 
     /// 자음에 묶이지 않은 추가 문구 목록(빈 문자열은 제외).
     static func extraSnippets() -> [String] {
-        let raw = UserDefaults(suiteName: appGroupID)?.stringArray(forKey: extraSnippetsKey) ?? []
+        extraSnippets(defaults: UserDefaults(suiteName: appGroupID))
+    }
+
+    static func extraSnippets(defaults: UserDefaults?) -> [String] {
+        let raw = defaults?.stringArray(forKey: extraSnippetsKey) ?? []
         return raw.filter { !$0.isEmpty }
     }
 
     /// ㅋㅌㅊㅍ 중 채워진 것 + 추가 문구를 합친, "문구" 버튼 후보 바에 보여줄 전체 목록.
     static func allSnippets() -> [String] {
-        let consonantSnippets: [String] = [Choseong.ㅋ, .ㅌ, .ㅊ, .ㅍ].compactMap { snippet(for: $0) }
-        return consonantSnippets + extraSnippets()
+        allSnippets(defaults: UserDefaults(suiteName: appGroupID))
+    }
+
+    static func allSnippets(defaults: UserDefaults?) -> [String] {
+        let consonantSnippets: [String] = [Choseong.ㅋ, .ㅌ, .ㅊ, .ㅍ].compactMap { snippet(for: $0, defaults: defaults) }
+        return consonantSnippets + extraSnippets(defaults: defaults)
     }
 }

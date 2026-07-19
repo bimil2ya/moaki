@@ -12,29 +12,45 @@ enum ExperimentalYVowelSettings {
     static let appliedCountKey = "experimentalYVowelAppliedCount"
     static let conflictOverrideCountKey = "experimentalYVowelConflictOverrideCount"
 
-    private static var defaults: UserDefaults? {
+    private static var defaultDefaults: UserDefaults? {
         UserDefaults(suiteName: AppGroupConstants.appGroupID)
     }
 
     static func isEnabled() -> Bool {
+        isEnabled(defaults: defaultDefaults)
+    }
+
+    static func isEnabled(defaults: UserDefaults?) -> Bool {
         defaults?.bool(forKey: enabledKey) ?? false
     }
 
     static func appliedCount() -> Int {
+        appliedCount(defaults: defaultDefaults)
+    }
+
+    static func appliedCount(defaults: UserDefaults?) -> Int {
         defaults?.integer(forKey: appliedCountKey) ?? 0
     }
 
     static func conflictOverrideCount() -> Int {
+        conflictOverrideCount(defaults: defaultDefaults)
+    }
+
+    static func conflictOverrideCount(defaults: UserDefaults?) -> Int {
         defaults?.integer(forKey: conflictOverrideCountKey) ?? 0
     }
 
     /// `handleKoreanModeGesture`(실제 입력 확정 지점)에서 제스처당 정확히 1회만 호출한다.
     /// `wasConflictOverride`는 기존 인식기 결과를 덮어썼을 때만 true.
     static func recordApplied(wasConflictOverride: Bool) {
+        recordApplied(wasConflictOverride: wasConflictOverride, defaults: defaultDefaults)
+    }
+
+    static func recordApplied(wasConflictOverride: Bool, defaults: UserDefaults?) {
         guard let defaults else { return }
-        defaults.set(appliedCount() + 1, forKey: appliedCountKey)
+        defaults.set(appliedCount(defaults: defaults) + 1, forKey: appliedCountKey)
         if wasConflictOverride {
-            defaults.set(conflictOverrideCount() + 1, forKey: conflictOverrideCountKey)
+            defaults.set(conflictOverrideCount(defaults: defaults) + 1, forKey: conflictOverrideCountKey)
         }
     }
 }

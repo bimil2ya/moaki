@@ -9,10 +9,14 @@
 
 ## Features
 
-- Swipe on consonant keys to input vowels (all 21 vowels)
+- Swipe on consonant keys to input vowels (all 21 vowels), or drag a basic vowel then tap the cheonjiin "dot(ㆍ)" key to shortcut into its Y-vowel form
+- Tap-based cheonjiin (ㅣㅡㆍ) input on the right column
 - 4-row consonant layout including double consonants
-- Long press consonants to input numbers
+- Long press consonants for numbers, long press ㅋㅌㅊㅍ for user-registered text snippets
+- Hanja (Chinese character) conversion based on the syllable before the cursor
 - Number/symbol keypad
+- Tap-based vowel picker mode for VoiceOver users
+- Adjustable gesture sensitivity, experimental Y-vowel round-trip recognizer (toggle in Settings)
 - Dark mode, haptic feedback
 - No network required
 
@@ -40,6 +44,8 @@ Drag on a consonant key to input a vowel. Left diagonals (↖, ↙) are normaliz
 | →←→ | ㅑ (ya) |
 | ←→← | ㅕ (yeo) |
 
+Alternatively, drag ㅏ/ㅓ/ㅗ/ㅜ then immediately tap the cheonjiin "dot(ㆍ)" key to turn it into ㅑ/ㅕ/ㅛ/ㅠ respectively (e.g. 하→햐, 모→묘).
+
 ### Compound Vowels
 
 | Direction | Vowel |
@@ -59,12 +65,14 @@ Drag on a consonant key to input a vowel. Left diagonals (↖, ↙) are normaliz
 ## Keyboard Layout
 
 ```
- ~  ㅃ ㅉ ㄸ ㄲ ㅆ  !
- ^  ㅂ ㅈ ㄷ ㄱ ㅅ  ?
- ;  ㅁ ㄴ ㅇ ㄹ ㅎ  .
- *  ㅋ ㅌ ㅊ ㅍ  ⌫
-[Space]  [⏎]  [🌐]
+ ~  ㅃ ㅉ ㄸ ㄲ ㅆ  #
+ ^  ㅂ ㅈ ㄷ ㄱ ㅅ  ⌫
+ ;  ㅁ ㄴ ㅇ ㄹ ㅎ  ㅣ
+ *  ㅋ ㅌ ㅊ ㅍ  ㅡ  ㆍ
+[123] [🌐] [        Space        ] [.,?!] [⏎]
 ```
+
+The top-right ㅣ · ㅡ · ㆍ keys work as cheonjiin (天地人) input — tapping them (without any drag gesture) also composes vowels, e.g. ㅣ+ㆍ=ㅏ, ㆍ+ㅡ=ㅗ. The `.,?!` key next to the space bar cycles through `. → , → ? → !` on each tap.
 
 Long press consonants for numbers:
 
@@ -88,8 +96,8 @@ Long press consonants for numbers:
 ## Build
 
 ```bash
-git clone https://github.com/vkehfdl1/ios-moaki.git
-cd ios-moaki
+git clone https://github.com/bimil2ya/moaki.git
+cd moaki
 open ios-moaki.xcodeproj
 ```
 
@@ -104,12 +112,12 @@ xcodebuild test -scheme MoakiKeyboardTests -destination 'platform=iOS Simulator,
 
 ```
 ios-moaki/
-├── ios-moaki/              # Main app (settings UI)
+├── ios-moaki/              # Main app (tutorial, snippet/gesture-sensitivity/experimental-feature settings)
 ├── MoakiKeyboard/          # Keyboard extension
-│   ├── Engine/             # Hangul composition (HangulComposer, GestureAnalyzer, VowelResolver)
-│   ├── Models/             # Data models (HangulJamo, GestureDirection, VowelPattern)
-│   ├── Views/              # SwiftUI views (KeyboardView, ConsonantGridView, etc.)
-│   ├── Utilities/          # Utilities (HangulConstants, KeyboardMetrics)
+│   ├── Engine/             # Hangul composition (HangulComposer, GestureAnalyzer, VowelResolver, CheonjiinResolver, HanjaDictionary)
+│   ├── Models/             # Data models (HangulJamo, GestureDirection, VowelPattern, CheonjiinStroke)
+│   ├── Views/              # SwiftUI views (KeyboardView, ConsonantGridView, HanjaCandidateBar, SnippetCandidateBar, etc.)
+│   ├── Utilities/          # Utilities (HangulConstants, KeyboardMetrics, SnippetSettings, etc.)
 │   └── KeyboardViewController.swift
 └── MoakiKeyboardTests/     # Unit tests
 ```

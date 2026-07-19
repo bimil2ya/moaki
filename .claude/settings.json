@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs -I{} stat -f '%m %Sm {}' -t '%Y-%m-%d %H:%M:%S' {})"
+    ]
+  }
+}

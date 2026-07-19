@@ -9,10 +9,14 @@
 
 ## 기능
 
-- 자음 키 위 스와이프로 모음 입력 (21종)
+- 자음 키 위 스와이프로 모음 입력 (21종), 드래그 후 천지인 "점(ㆍ)"으로 Y계열(ㅑㅕㅛㅠ) 단축 변환
+- 우측 열 천지인(ㅣㅡㆍ) 탭 입력 지원
 - 쌍자음 포함 4줄 자음 배열
-- 자음 길게 누르면 숫자 입력
+- 자음 길게 누르면 숫자 입력, ㅋㅌㅊㅍ 길게 누르면 등록해둔 문구 자동완성
+- 한자 변환 (커서 앞 음절 기준 후보 제시)
 - 숫자/기호 키패드
+- VoiceOver 사용자를 위한 탭 기반 모음 선택 모드
+- 제스처 민감도 조절, 실험적 Y계열 원점 복귀 인식기(설정 화면에서 켜고 끌 수 있음)
 - 다크모드, 햅틱 피드백
 - 네트워크 불필요
 
@@ -39,6 +43,8 @@
 | ↓↑↓ | ㅠ |
 | →←→ | ㅑ |
 | ←→← | ㅕ |
+
+또는, 드래그로 ㅏ·ㅓ·ㅗ·ㅜ를 만든 뒤 곧바로 천지인 "점(ㆍ)" 키를 누르면 각각 ㅑ·ㅕ·ㅛ·ㅠ로 바뀝니다(예: 하→햐, 모→묘).
 
 ### 복합 모음
 
@@ -90,8 +96,8 @@
 ## 빌드
 
 ```bash
-git clone https://github.com/vkehfdl1/ios-moaki.git
-cd ios-moaki
+git clone https://github.com/bimil2ya/moaki.git
+cd moaki
 open ios-moaki.xcodeproj
 ```
 
@@ -106,12 +112,12 @@ xcodebuild test -scheme MoakiKeyboardTests -destination 'platform=iOS Simulator,
 
 ```
 ios-moaki/
-├── ios-moaki/              # 메인 앱 (설정 UI)
+├── ios-moaki/              # 메인 앱 (튜토리얼, 문구/제스처민감도/실험기능 설정 화면)
 ├── MoakiKeyboard/          # 키보드 익스텐션
-│   ├── Engine/             # 한글 조합 (HangulComposer, GestureAnalyzer, VowelResolver)
-│   ├── Models/             # 데이터 모델 (HangulJamo, GestureDirection, VowelPattern)
-│   ├── Views/              # SwiftUI 뷰 (KeyboardView, ConsonantGridView 등)
-│   ├── Utilities/          # 유틸리티 (HangulConstants, KeyboardMetrics)
+│   ├── Engine/             # 한글 조합 (HangulComposer, GestureAnalyzer, VowelResolver, CheonjiinResolver, HanjaDictionary)
+│   ├── Models/             # 데이터 모델 (HangulJamo, GestureDirection, VowelPattern, CheonjiinStroke)
+│   ├── Views/              # SwiftUI 뷰 (KeyboardView, ConsonantGridView, HanjaCandidateBar, SnippetCandidateBar 등)
+│   ├── Utilities/          # 유틸리티 (HangulConstants, KeyboardMetrics, SnippetSettings 등)
 │   └── KeyboardViewController.swift
 └── MoakiKeyboardTests/     # 유닛 테스트
 ```

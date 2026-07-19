@@ -4,6 +4,7 @@ struct FunctionRowView: View {
     let totalWidth: CGFloat
     let isSymbolMode: Bool
     let onToggleModePressed: () -> Void
+    let onSwitchKeyboardPressed: () -> Void
     let onSnippetsPressed: () -> Void
     let onHanjaPressed: () -> Void
     let onSpaceDragStart: (CGPoint) -> Void
@@ -29,9 +30,22 @@ struct FunctionRowView: View {
                 accessibilityLabel: isSymbolMode ? "한글 키보드로 전환" : "숫자 및 기호 키보드로 전환"
             )
 
+            // 다음 키보드로 전환. needsInputModeSwitchKey로 조건부 표시하지 않고
+            // 항상 노출한다 — 이 프로퍼티는 기기·iOS 버전에 따라 신뢰할 수 없다고
+            // 보고된 사례가 많아(KeyboardViewModel.switchToNextKeyboard() 주석 참고),
+            // 전환 수단이 안 보여 사용자가 갇히는 쪽보다 항상 보이는 쪽이 안전하다.
+            FunctionKeyView(
+                content: AnyView(
+                    Image(systemName: "globe")
+                        .font(.system(size: 20))
+                ),
+                width: sideWidth,
+                height: height,
+                action: onSwitchKeyboardPressed,
+                accessibilityLabel: "다음 키보드로 전환"
+            )
+
             // 문구: 등록해둔 문구를 후보 바로 보여주는 버튼
-            // (지구본은 iOS가 서드파티 키보드에 강제로 붙이는 하단 시스템 바로도
-            // 이미 전환이 가능해서, 기능행에서는 빼고 이 자리를 문구 단축키로 쓴다)
             FunctionKeyView(
                 content: AnyView(
                     Text("문구")
@@ -108,9 +122,11 @@ struct FunctionRowView: View {
         sideWidth
     }
 
-    // 6개 버튼: 문구/한자/punctuation/return은 고정(sideWidth), toggle/space가 나머지를 나눠 가진다.
+    // 7개 버튼: 지구본/문구/한자/punctuation/return은 고정(sideWidth), toggle/space가
+    // 나머지를 나눠 가진다. 현재 350pt 프리뷰와 375pt 최소 지원 폭(iPhone SE급)에서
+    // spaceWidth가 44pt 이상으로 검증됨 — 기능 키를 더 늘리면 재계산 필요.
     private var remainingWidth: CGFloat {
-        totalWidth - sideWidth * 4 - spacing * 7
+        totalWidth - sideWidth * 5 - spacing * 8
     }
 
     private var toggleWidth: CGFloat {
@@ -178,6 +194,7 @@ struct FunctionKeyView: View {
             totalWidth: 350,
             isSymbolMode: false,
             onToggleModePressed: { print("Toggle") },
+            onSwitchKeyboardPressed: { print("Switch") },
             onSnippetsPressed: { print("Snippets") },
             onHanjaPressed: { print("Hanja") },
             onSpaceDragStart: { _ in print("Space drag start") },
@@ -193,6 +210,7 @@ struct FunctionKeyView: View {
             totalWidth: 350,
             isSymbolMode: true,
             onToggleModePressed: { print("Toggle") },
+            onSwitchKeyboardPressed: { print("Switch") },
             onSnippetsPressed: { print("Snippets") },
             onHanjaPressed: { print("Hanja") },
             onSpaceDragStart: { _ in print("Space drag start") },

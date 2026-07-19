@@ -34,14 +34,24 @@ enum KeyboardMetrics {
     private static let baseReversalThreshold: CGFloat = 10       // Lower threshold for opposite direction reversals
     private static let baseDirectionChangeThreshold: CGFloat = 15 // Distance before direction can change
 
+    static func gestureThreshold(multiplier: CGFloat) -> CGFloat {
+        baseGestureThreshold * multiplier
+    }
+    static func reversalThreshold(multiplier: CGFloat) -> CGFloat {
+        baseReversalThreshold * multiplier
+    }
+    static func directionChangeThreshold(multiplier: CGFloat) -> CGFloat {
+        baseDirectionChangeThreshold * multiplier
+    }
+
     static var gestureThreshold: CGFloat {
-        baseGestureThreshold * GestureSensitivitySettings.multiplier()
+        gestureThreshold(multiplier: GestureSensitivitySettings.multiplier())
     }
     static var reversalThreshold: CGFloat {
-        baseReversalThreshold * GestureSensitivitySettings.multiplier()
+        reversalThreshold(multiplier: GestureSensitivitySettings.multiplier())
     }
     static var directionChangeThreshold: CGFloat {
-        baseDirectionChangeThreshold * GestureSensitivitySettings.multiplier()
+        directionChangeThreshold(multiplier: GestureSensitivitySettings.multiplier())
     }
     static let gestureTimeout: TimeInterval = 0.5    // Max time between direction changes
 
