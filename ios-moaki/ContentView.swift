@@ -10,7 +10,8 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            ScrollView {
+                VStack(spacing: 24) {
                 // Header
                 VStack(spacing: 8) {
                     Text("모아키")
@@ -34,8 +35,6 @@ struct ContentView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 24)
-
-                Spacer()
 
                 // Setup Instructions
                 VStack(alignment: .leading, spacing: 16) {
@@ -73,8 +72,6 @@ struct ContentView: View {
                 )
                 .padding(.horizontal, 16)
 
-                Spacer()
-
                 // Buttons
                 VStack(spacing: 12) {
                     NavigationLink {
@@ -108,9 +105,70 @@ struct ContentView: View {
                                 .stroke(Color.blue, lineWidth: 1.5)
                         )
                     }
+
+                    NavigationLink {
+                        SnippetSettingsView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "text.badge.plus")
+                            Text("자주 쓰는 문구 설정")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue, lineWidth: 1.5)
+                        )
+                    }
+
+                    NavigationLink {
+                        GestureSensitivitySettingsView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "hand.draw")
+                            Text("제스처 민감도 설정")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue, lineWidth: 1.5)
+                        )
+                    }
+
+                    NavigationLink {
+                        ExperimentalYVowelSettingsView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("실험 기능: Y계열 인식")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue, lineWidth: 1.5)
+                        )
+                    }
                 }
                 .padding(.horizontal, 24)
+
+                NavigationLink {
+                    LicensesView()
+                } label: {
+                    Text("오픈소스 라이선스")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 4)
                 .padding(.bottom, 32)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
         }

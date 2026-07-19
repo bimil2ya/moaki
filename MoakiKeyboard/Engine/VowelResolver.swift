@@ -75,6 +75,15 @@ class VowelResolver {
                                          previous: GestureDirection?) -> GestureDirection {
         guard direction.isDiagonal else { return direction }
 
+        // This cardinal-decomposition heuristic assumes `previous` is itself a
+        // cardinal direction (it exists to reinterpret drift like ↑ then ↗ as ↑→).
+        // When the previous stroke is already diagonal — as in ㅢ's ↘ then ↖ — the
+        // pair has its own dedicated meaning, so leave it alone instead of
+        // collapsing it down to a single cardinal component.
+        if let previous, previous.isDiagonal {
+            return direction
+        }
+
         guard let (vertical, horizontal) = diagonalComponents(of: direction) else {
             return direction
         }

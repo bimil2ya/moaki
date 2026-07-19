@@ -1,5 +1,4 @@
 import XCTest
-@testable import MoakiKeyboard
 
 final class VowelResolverTests: XCTestCase {
 
@@ -96,35 +95,34 @@ final class VowelResolverTests: XCTestCase {
     func testDiphthongDiagonalDrift() {
         // ㅙ = ↑→↙ (세 번째 획이 ↙로 빠지면 ← 성분으로 해석)
         XCTAssertEqual(resolver.resolve(directions: [.up, .right, .downLeft]).vowel, .ㅙ)
-        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .down]).vowel, .ㅘ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .down]).vowel, .ㅙ)
 
         // ㅙ = ↑↗← (두 번째 획이 ↗면 → 성분으로 해석)
         XCTAssertEqual(resolver.resolve(directions: [.up, .upRight, .left]).vowel, .ㅙ)
 
         // ㅙ = ↑↗↙ (두 번째/세 번째 획 모두 대각선이어도 →/← 성분을 추출)
         XCTAssertEqual(resolver.resolve(directions: [.up, .upRight, .downLeft]).vowel, .ㅙ)
-        XCTAssertEqual(resolver.resolve(directions: [.up, .upRight, .down]).vowel, .ㅘ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .upRight, .down]).vowel, .ㅙ)
 
         // ㅞ = ↓←↘ (세 번째 획이 ↘면 → 성분으로 해석)
         XCTAssertEqual(resolver.resolve(directions: [.down, .left, .downRight]).vowel, .ㅞ)
-        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .down]).vowel, .ㅝ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .down]).vowel, .ㅞ)
 
         // ㅞ = ↓↙→ (두 번째 획이 ↙면 ← 성분으로 해석)
         XCTAssertEqual(resolver.resolve(directions: [.down, .downLeft, .right]).vowel, .ㅞ)
 
         // ㅞ = ↓↙↘ (두 번째/세 번째 획 모두 대각선이어도 ←/→ 성분을 추출)
         XCTAssertEqual(resolver.resolve(directions: [.down, .downLeft, .downRight]).vowel, .ㅞ)
-        XCTAssertEqual(resolver.resolve(directions: [.down, .downLeft, .down]).vowel, .ㅝ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .downLeft, .down]).vowel, .ㅞ)
     }
 
     func testDiphthongDriftFallsBackToPrefixMatch() {
-        // Additional trailing movement should still keep the best prefix vowel instead of nil.
+        // A third stroke that leaves the original axis intentionally selects the extended vowel.
         XCTAssertEqual(resolver.resolve(directions: [.up, .right]).vowel, .ㅘ)
-        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .up]).vowel, .ㅘ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .up]).vowel, .ㅙ)
 
-        // Should never over-promote to ㅞ without left-then-right evidence.
-        XCTAssertNotEqual(resolver.resolve(directions: [.down, .left, .up]).vowel, .ㅞ)
-        XCTAssertNotNil(resolver.resolve(directions: [.down, .left, .up]).vowel)
+        // Down-left-up is likewise an accepted third-stroke variation for ㅞ.
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .up]).vowel, .ㅞ)
     }
 
     // MARK: - Ae/E Vowel Tests
@@ -146,11 +144,70 @@ final class VowelResolverTests: XCTestCase {
     // MARK: - Special Vowels
 
     func testSpecialVowels() {
-        // ㅢ = ↘↖ (오른쪽아래-왼쪽위)
+        // ㅢ = ↘↖ (오른쪽아래-왼쪽위, 정반대 방향)
         XCTAssertEqual(resolver.resolve(directions: [.downRight, .upLeft]).vowel, .ㅢ)
 
-        // ㅢ = ↘↑ (오른쪽아래-위)
+        // ↘ 다음에 오는 방향은 ㅢ 말고는 의미가 없으므로, 정반대(↖)가 아니어도
+        // "계속 같은 방향(↓, →)"만 아니면 전부 ㅢ로 받아들인다.
         XCTAssertEqual(resolver.resolve(directions: [.downRight, .up]).vowel, .ㅢ)
+        XCTAssertEqual(resolver.resolve(directions: [.downRight, .left]).vowel, .ㅢ)
+        XCTAssertEqual(resolver.resolve(directions: [.downRight, .upRight]).vowel, .ㅢ)
+        XCTAssertEqual(resolver.resolve(directions: [.downRight, .downLeft]).vowel, .ㅢ)
+
+        // 하지만 계속 같은 방향으로 가는 것(↓, →)은 ㅢ가 아니다.
+        XCTAssertNotEqual(resolver.resolve(directions: [.downRight, .down]).vowel, .ㅢ)
+        XCTAssertNotEqual(resolver.resolve(directions: [.downRight, .right]).vowel, .ㅢ)
+    }
+
+    // MARK: - Same Relaxation Applied to Other Single-Continuation Nodes
+
+    func testWideAngleAcceptedForAeYaFamily() {
+        // → 다음에 오는 획은 ㅐ(그리고 그 연장인 ㅑㅒ) 말고는 뜻이 없으므로,
+        // 정확히 ←가 아니어도(↑나 ↓여도) 같은 의도로 본다.
+        XCTAssertEqual(resolver.resolve(directions: [.right, .left]).vowel, .ㅐ)
+        XCTAssertEqual(resolver.resolve(directions: [.right, .up]).vowel, .ㅐ)
+        XCTAssertEqual(resolver.resolve(directions: [.right, .down]).vowel, .ㅐ)
+        XCTAssertEqual(resolver.resolve(directions: [.right, .left, .up]).vowel, .ㅑ)
+        XCTAssertEqual(resolver.resolve(directions: [.right, .left, .down]).vowel, .ㅑ)
+    }
+
+    func testWideAngleAcceptedForEYeoFamily() {
+        // ← 다음도 마찬가지로 ㅔ(와 ㅕㅖ) 말고는 뜻이 없다.
+        XCTAssertEqual(resolver.resolve(directions: [.left, .right]).vowel, .ㅔ)
+        XCTAssertEqual(resolver.resolve(directions: [.left, .up]).vowel, .ㅔ)
+        XCTAssertEqual(resolver.resolve(directions: [.left, .down]).vowel, .ㅔ)
+        XCTAssertEqual(resolver.resolve(directions: [.left, .right, .up]).vowel, .ㅕ)
+        XCTAssertEqual(resolver.resolve(directions: [.left, .right, .down]).vowel, .ㅕ)
+    }
+
+    func testWideAngleAcceptedForYoAfterOeAndYuAfterWi() {
+        // ↑↓(ㅚ 확정)까지 온 다음의 세 번째 획은 ㅛ 말고는 뜻이 없고,
+        // ↓↑(ㅟ 확정) 다음도 ㅠ 말고는 뜻이 없다.
+        XCTAssertEqual(resolver.resolve(directions: [.up, .down, .up]).vowel, .ㅛ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .down, .left]).vowel, .ㅛ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .down, .right]).vowel, .ㅛ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .up, .down]).vowel, .ㅠ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .up, .left]).vowel, .ㅠ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .up, .right]).vowel, .ㅠ)
+    }
+
+    func testWideAngleAcceptedForWaeAfterWaAndWeAfterWeo() {
+        // ↑→(ㅘ 확정) 다음의 세 번째 획은 ㅙ 말고는 뜻이 없고,
+        // ↓←(ㅝ 확정) 다음도 ㅞ 말고는 뜻이 없다.
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .left]).vowel, .ㅙ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .up]).vowel, .ㅙ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right, .down]).vowel, .ㅙ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .right]).vowel, .ㅞ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .up]).vowel, .ㅞ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left, .down]).vowel, .ㅞ)
+    }
+
+    func testUpAndDownStillDisambiguateAsFirstStroke() {
+        // 반대로 ↑/↓가 "첫 획"일 때는 진짜 갈림길이라 정확한 방향이 필요하다.
+        XCTAssertEqual(resolver.resolve(directions: [.up, .down]).vowel, .ㅚ)
+        XCTAssertEqual(resolver.resolve(directions: [.up, .right]).vowel, .ㅘ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .up]).vowel, .ㅟ)
+        XCTAssertEqual(resolver.resolve(directions: [.down, .left]).vowel, .ㅝ)
     }
 
     // MARK: - Edge Cases

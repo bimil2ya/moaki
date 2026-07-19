@@ -133,4 +133,12 @@ extension KeyboardViewController: KeyboardViewModelDelegate {
         feedbackGenerator?.impactOccurred()
         feedbackGenerator?.prepare()
     }
+
+    func moveCursor(byCharacterOffset offset: Int) {
+        textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+    }
+
+    func characterBeforeCursor() -> Character? {
+        textDocumentProxy.documentContextBeforeInput?.last
+    }
 }

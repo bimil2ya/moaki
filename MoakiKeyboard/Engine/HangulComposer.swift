@@ -186,6 +186,10 @@ class HangulComposer {
         case (.ㅜ, .ㅔ): return .ㅞ
         case (.ㅜ, .ㅣ): return .ㅟ
         case (.ㅡ, .ㅣ): return .ㅢ
+        case (.ㅏ, .ㅣ): return .ㅐ
+        case (.ㅑ, .ㅣ): return .ㅒ
+        case (.ㅓ, .ㅣ): return .ㅔ
+        case (.ㅕ, .ㅣ): return .ㅖ
         default: return nil
         }
     }
