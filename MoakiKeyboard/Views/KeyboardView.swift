@@ -44,8 +44,8 @@ struct KeyboardView: View {
                         onGestureEnd: { row, column in
                             viewModel.gestureEnded(row: row, column: column)
                         },
-                        onAccessibilityVowelSelected: { consonant, vowel in
-                            viewModel.inputConsonantAndVowelForAccessibility(consonant, vowel: vowel)
+                        onRequestAccessibilityVowelPicker: { consonant in
+                            viewModel.showAccessibilityVowelPicker(for: consonant)
                         }
                     )
 
@@ -117,6 +117,22 @@ struct KeyboardView: View {
                         Spacer()
                     }
                 }
+
+                // VoiceOver 접근성 모음 선택 바 (자음 키의 커스텀 액션으로 진입)
+                if let consonant = viewModel.accessibilityVowelPickerConsonant {
+                    VStack(spacing: 0) {
+                        AccessibilityVowelPickerBar(
+                            consonant: consonant,
+                            onSelect: { vowel in
+                                viewModel.selectAccessibilityVowel(vowel)
+                            },
+                            onCancel: {
+                                viewModel.dismissAccessibilityVowelPicker()
+                            }
+                        )
+                        Spacer()
+                    }
+                }
             }
             .background(Color(.systemGray6))
         }
@@ -132,6 +148,8 @@ class KeyboardViewModel: ObservableObject {
     @Published var isSymbolMode: Bool = false
     @Published var hanjaCandidates: [HanjaDictionary.Candidate] = []
     @Published var snippetCandidates: [String] = []
+    /// VoiceOver 접근성 모음 선택 바가 표시 중이면 대상 자음, 아니면 nil.
+    @Published var accessibilityVowelPickerConsonant: Choseong?
 
     private let composer = HangulComposer()
     private let gestureAnalyzer = GestureAnalyzer()
@@ -220,12 +238,28 @@ class KeyboardViewModel: ObservableObject {
         triggerHapticFeedback()
     }
 
-    /// VoiceOver의 접근성 모음 선택 화면(AccessibilityVowelPickerView)에서 호출된다.
-    /// 드래그 제스처를 전혀 거치지 않고 기존 inputConsonant/inputVowel 경로를 그대로
-    /// 재사용해 자음+모음을 조합한다 — 새 조합 로직을 만들지 않는다.
-    func inputConsonantAndVowelForAccessibility(_ consonant: Choseong, vowel: Jungseong) {
+    // MARK: - VoiceOver 접근성 모음 선택 (실험 없는 별도 입력 경로)
+
+    /// 자음 키의 VoiceOver 커스텀 액션에서 호출된다. 오버레이(AccessibilityVowelPickerBar)를
+    /// 띄우기만 하고, 실제 조합은 사용자가 모음을 고른 뒤 selectAccessibilityVowel에서 한다.
+    func showAccessibilityVowelPicker(for consonant: Choseong) {
+        dismissCandidateBars() // 한자/문구 바와 동시에 뜨지 않게 한다
+        accessibilityVowelPickerConsonant = consonant
+        triggerHapticFeedback()
+    }
+
+    /// 오버레이에서 모음을 골랐을 때 호출된다. 드래그 제스처를 전혀 거치지 않고 기존
+    /// inputConsonant/inputVowel 경로를 그대로 재사용해 자음+모음을 조합한다 — 새 조합
+    /// 로직을 만들지 않는다.
+    func selectAccessibilityVowel(_ vowel: Jungseong) {
+        guard let consonant = accessibilityVowelPickerConsonant else { return }
+        accessibilityVowelPickerConsonant = nil
         inputConsonant(consonant)
         inputVowel(vowel)
+    }
+
+    func dismissAccessibilityVowelPicker() {
+        accessibilityVowelPickerConsonant = nil
     }
 
     /// 천지인 ㅣㅡㆍ 스트로크 입력. 버퍼가 더 확장될 수 있으면 대기하고,
@@ -423,6 +457,7 @@ class KeyboardViewModel: ObservableObject {
     private func dismissCandidateBars() {
         hanjaCandidates = []
         snippetCandidates = []
+        accessibilityVowelPickerConsonant = nil
     }
 
     func beginBackspacePress() {

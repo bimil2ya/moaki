@@ -29,14 +29,17 @@ final class HanjaDictionary {
 
     private func loadIfNeeded() {
         guard !isLoaded else { return }
-        isLoaded = true
 
         // Bundle.main이 아니라 Bundle(for:)를 써야 익스텐션/테스트 양쪽에서
         // 이 리소스가 실제로 컴파일된 번들(MoakiKeyboard)을 정확히 찾는다.
+        // isLoaded는 로드가 실제로 성공했을 때만 true로 설정한다 — 그렇지 않으면
+        // 일시적 실패(메모리 부족 등) 한 번으로 이 프로세스가 살아있는 동안
+        // 한자 기능이 영구적으로 먹통이 된다.
         guard let url = Bundle(for: HanjaDictionary.self).url(forResource: "hanja_single", withExtension: "txt"),
               let contents = try? String(contentsOf: url, encoding: .utf8) else {
             return
         }
+        isLoaded = true
 
         contents.enumerateLines { line, _ in
             guard !line.hasPrefix("#"), !line.isEmpty else { return }

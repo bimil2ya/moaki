@@ -440,14 +440,28 @@ final class KeyboardViewModelAccessibilityVowelTests: XCTestCase {
         super.tearDown()
     }
 
-    func testAccessibilityPathComposesConsonantAndVowelWithoutGesture() {
-        viewModel.inputConsonantAndVowelForAccessibility(.ㄱ, vowel: .ㅏ)
+    func testShowPickerThenSelectComposesConsonantAndVowelWithoutGesture() {
+        viewModel.showAccessibilityVowelPicker(for: .ㄱ)
+        XCTAssertEqual(viewModel.accessibilityVowelPickerConsonant, .ㄱ)
+
+        viewModel.selectAccessibilityVowel(.ㅏ)
+
         XCTAssertEqual(delegate.composingUpdates.last?.current, "가")
+        XCTAssertNil(viewModel.accessibilityVowelPickerConsonant, "선택 후에는 바가 닫혀야 함")
     }
 
-    func testAccessibilityPathWorksForYVowelsTooWithoutAnyGesture() {
-        viewModel.inputConsonantAndVowelForAccessibility(.ㅂ, vowel: .ㅑ)
+    func testShowPickerThenSelectWorksForYVowelsTooWithoutAnyGesture() {
+        viewModel.showAccessibilityVowelPicker(for: .ㅂ)
+        viewModel.selectAccessibilityVowel(.ㅑ)
         XCTAssertEqual(delegate.composingUpdates.last?.current, "뱌")
+    }
+
+    func testCancelClosesPickerWithoutComposingAnything() {
+        viewModel.showAccessibilityVowelPicker(for: .ㄱ)
+        viewModel.dismissAccessibilityVowelPicker()
+
+        XCTAssertNil(viewModel.accessibilityVowelPickerConsonant)
+        XCTAssertTrue(delegate.composingUpdates.isEmpty)
     }
 
     /// 접근성 경로가 gestureAnalyzer/gestureDirections 등 기존 드래그 상태를 전혀
@@ -459,10 +473,24 @@ final class KeyboardViewModelAccessibilityVowelTests: XCTestCase {
         let activeKeyBefore = viewModel.activeKey?.row
         let gestureStartBefore = viewModel.gestureStartPoint
 
-        viewModel.inputConsonantAndVowelForAccessibility(.ㄴ, vowel: .ㅓ)
+        viewModel.showAccessibilityVowelPicker(for: .ㄴ)
+        viewModel.selectAccessibilityVowel(.ㅓ)
 
         XCTAssertEqual(viewModel.activeKey?.row, activeKeyBefore)
         XCTAssertEqual(viewModel.gestureStartPoint, gestureStartBefore)
+    }
+
+    /// 한자/문구 후보 바가 떠 있으면 접근성 모음 선택 바를 열 때 서로 닫혀야
+    /// (동시에 여러 오버레이가 뜨지 않아야) 한다.
+    func testShowingPickerDismissesOtherCandidateBars() {
+        delegate.characterBeforeCursorStub = "가"
+        viewModel.showHanjaCandidates()
+        XCTAssertFalse(viewModel.hanjaCandidates.isEmpty)
+
+        viewModel.showAccessibilityVowelPicker(for: .ㄱ)
+
+        XCTAssertTrue(viewModel.hanjaCandidates.isEmpty)
+        XCTAssertEqual(viewModel.accessibilityVowelPickerConsonant, .ㄱ)
     }
 }
 

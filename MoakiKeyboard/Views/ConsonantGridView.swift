@@ -16,7 +16,8 @@ struct KeyGridView: View {
     let onGestureMove: (CGPoint) -> Void
     let onGestureEnd: (Int, Int) -> Void
     /// VoiceOver 전용 접근성 모음 선택 경로. 기존 드래그 제스처 경로와 완전히 분리되어 있다.
-    var onAccessibilityVowelSelected: ((Choseong, Jungseong) -> Void)? = nil
+    /// 어느 자음에서 요청됐는지만 전달하고, 실제 모음 선택 UI는 KeyboardView가 그린다.
+    var onRequestAccessibilityVowelPicker: ((Choseong) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: KeyboardMetrics.keySpacing) {
@@ -64,9 +65,9 @@ struct KeyGridView: View {
                             onGestureEnd: {
                                 onGestureEnd(row, column)
                             },
-                            onAccessibilityVowelSelected: { vowel in
+                            onRequestAccessibilityVowelPicker: {
                                 guard case .consonant(let consonant) = content else { return }
-                                onAccessibilityVowelSelected?(consonant, vowel)
+                                onRequestAccessibilityVowelPicker?(consonant)
                             }
                         )
                     }

@@ -23,7 +23,9 @@ struct KeyView: View {
     let onGestureMove: (CGPoint) -> Void
     let onGestureEnd: () -> Void
     /// VoiceOver 전용 접근성 모음 선택 경로. 기존 드래그 제스처는 전혀 바꾸지 않는다.
-    let onAccessibilityVowelSelected: ((Jungseong) -> Void)?
+    /// 실제 모음 선택 UI는 KeyboardView의 오버레이(AccessibilityVowelPickerBar)가
+    /// 담당하므로, 여기서는 "이 자음으로 모음 선택 화면을 열어달라"는 요청만 올려보낸다.
+    let onRequestAccessibilityVowelPicker: (() -> Void)?
 
     init(
         content: KeyContent,
@@ -38,7 +40,7 @@ struct KeyView: View {
         onGestureStart: @escaping (CGPoint) -> Void,
         onGestureMove: @escaping (CGPoint) -> Void,
         onGestureEnd: @escaping () -> Void,
-        onAccessibilityVowelSelected: ((Jungseong) -> Void)? = nil
+        onRequestAccessibilityVowelPicker: (() -> Void)? = nil
     ) {
         self.content = content
         self.keySize = keySize
@@ -52,7 +54,7 @@ struct KeyView: View {
         self.onGestureStart = onGestureStart
         self.onGestureMove = onGestureMove
         self.onGestureEnd = onGestureEnd
-        self.onAccessibilityVowelSelected = onAccessibilityVowelSelected
+        self.onRequestAccessibilityVowelPicker = onRequestAccessibilityVowelPicker
     }
 
     @State private var isHighlighted = false
@@ -60,7 +62,6 @@ struct KeyView: View {
     @State private var longPressTimer: Timer?
     @State private var isShowingDirectionalPopup = false
     @State private var highlightedDirectionSymbol: String?
-    @State private var isShowingAccessibilityVowelPicker = false
 
     /// 이 거리 이상 움직여야 방향이 "골라졌다"고 본다 (가운데 죽은 영역).
     private let directionalSelectDeadzone: CGFloat = 16
@@ -88,14 +89,7 @@ struct KeyView: View {
         .accessibilityActions {
             if case .consonant = content {
                 Button("모음 선택하여 입력") {
-                    isShowingAccessibilityVowelPicker = true
-                }
-            }
-        }
-        .sheet(isPresented: $isShowingAccessibilityVowelPicker) {
-            if case .consonant(let consonant) = content {
-                AccessibilityVowelPickerView(consonant: consonant) { vowel in
-                    onAccessibilityVowelSelected?(vowel)
+                    onRequestAccessibilityVowelPicker?()
                 }
             }
         }
