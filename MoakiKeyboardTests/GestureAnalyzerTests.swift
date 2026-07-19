@@ -796,4 +796,65 @@ final class GestureAnalyzerTests: XCTestCase {
         smallThresholdAnalyzer.addPoint(CGPoint(x: 250, y: 200))
         XCTAssertNil(smallThresholdAnalyzer.confirmedYVowel, "threshold=20 기준에서는 같은 10px 복귀가 반경 밖이라 미확정이어야 함")
     }
+
+    // MARK: - upSectorExpansionDegrees (왼쪽 끝 자음 열 위쪽 드래그 오인식 보정)
+
+    /// 70도(왼쪽 끝 열에서 위로 드래그할 때 화면 중앙 쪽으로 휘어진 각도)로 위-아래-위
+    /// 왕복. 두 번째 다리는 정확히 270도(순수 아래)가 아니라 첫 70도의 정반대인 250도여야
+    /// 한다 — 270도로 두면 두 번째 다리 전체가 원점에서 최소 약 10.7pt 떨어진 수직선이 되어
+    /// 복귀 반경(threshold 20 기준 8pt) 안에 못 들어와 confirmedYVowel이 .outbound에 갇혀
+    /// nil로 남는다(직접 좌표 계산으로 확인). 첫 다리도 정확히 30pt(outbound 진입 경계값)가
+    /// 아니라 32pt로 여유를 둬 부동소수점 누적 오차로 경계 바로 아래 걸리는 것을 방지한다.
+    func testExpansion20AllowsLeftEdgeColumnRoundTripToProduceYo() {
+        let analyzer = GestureAnalyzer(threshold: 20, reversalThreshold: 10, directionChangeThreshold: 15)
+        analyzer.reset(upSectorExpansionDegrees: 20)
+        simulateDrag(analyzer, start: CGPoint(x: 300, y: 300), legs: [
+            (angleDegrees: 70, distance: 32, steps: 16),
+            (angleDegrees: 250, distance: 25, steps: 12),
+            (angleDegrees: 70, distance: 22, steps: 11),
+        ])
+
+        let directions = analyzer.finalizeGesture()
+        XCTAssertEqual(directions, [.up, .down, .up], "확장 적용 시 70도 왕복이 일반 경로에서 [up,down,up]으로 분류되어야 함")
+        XCTAssertEqual(VowelResolver().resolve(directions: directions).vowel, .ㅛ, "일반 경로(VowelResolver)도 ㅛ로 해석해야 함")
+        // directions/resolver 검증만으로는 Y계열 상태기계(idle 2곳 + returned 1곳)에
+        // 확장값이 실제로 전달됐는지 결정적으로 증명하지 못한다 — 그 셋은 analyzeLatestMovement와
+        // 완전히 별개 경로이므로, confirmedYVowel까지 확인해야 6곳 전체가 뒷받침된다.
+        XCTAssertEqual(analyzer.confirmedYVowel, .ㅛ, "실험적 원점 복귀 인식기(Y계열 상태기계)도 확장값을 받아 ㅛ를 확정해야 함")
+    }
+
+    /// 대조군: 확장 없이 같은 70도 왕복을 시도하면 첫 방향부터 upRight(ㅣ)로 잘못
+    /// 분류되어야 한다 — 보정이 실제로 필요했음을 직접 증명한다. 대각선(upRight)으로
+    /// 시작한 제스처는 Y계열 후보에서 영구 배제되므로 confirmedYVowel도 nil이어야 한다.
+    func testWithoutExpansionSameRoundTripStaysUpRightAndFailsToProduceYo() {
+        let analyzer = GestureAnalyzer(threshold: 20, reversalThreshold: 10, directionChangeThreshold: 15)
+        analyzer.reset() // upSectorExpansionDegrees: 0(기본값)
+        simulateDrag(analyzer, start: CGPoint(x: 300, y: 300), legs: [
+            (angleDegrees: 70, distance: 32, steps: 16),
+            (angleDegrees: 250, distance: 25, steps: 12),
+            (angleDegrees: 70, distance: 22, steps: 11),
+        ])
+
+        let directions = analyzer.finalizeGesture()
+        XCTAssertEqual(directions.first, .upRight, "보정 없이는 70도 첫 방향이 upRight(ㅣ)로 잘못 분류되어야 함")
+        XCTAssertNotEqual(VowelResolver().resolve(directions: directions).vowel, .ㅛ)
+        XCTAssertNil(analyzer.confirmedYVowel, "대각선으로 시작한 제스처는 Y계열 후보에서 영구 배제되어 nil이어야 함")
+    }
+
+    /// "같은 방향 계속" 판정(analyzeLatestMovement 3곳 중 나머지 1곳)에 확장값이 전달되지
+    /// 않으면, 긴 첫 획 도중 기준점이 갱신되지 않아 짧은 되돌림이 등록되지 않는 회귀가
+    /// 생길 수 있다. 기존 testLongFirstLegDoesNotBlockShortReversalForEui 패턴을 좌측 열
+    /// 보정 각도(70도)에 적용한다. 두 번째 다리(12pt)는 표준 방향 분류 임계값(20pt)보다
+    /// 짧지만 reversal 임계값(10pt)보다 길다 — 첫 up에 대한 down은 반전이므로, 표준
+    /// 경로가 아니라 reversal 전용 경로로만 등록되어야 하는 지점을 정확히 시험한다.
+    func testExpansion20LongFirstLegStillRegistersShortReversal() {
+        let analyzer = GestureAnalyzer(threshold: 20, reversalThreshold: 10, directionChangeThreshold: 15)
+        analyzer.reset(upSectorExpansionDegrees: 20)
+        simulateDrag(analyzer, start: CGPoint(x: 300, y: 300), legs: [
+            (angleDegrees: 70, distance: 70, steps: 35),
+            (angleDegrees: 250, distance: 12, steps: 6),
+        ])
+
+        XCTAssertEqual(analyzer.finalizeGesture(), [.up, .down], "긴 첫 획 뒤 짧은 되돌림도 정상 등록되어야 함")
+    }
 }

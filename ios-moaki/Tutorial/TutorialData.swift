@@ -66,7 +66,7 @@ enum TutorialContent {
         TutorialStage(
             id: 2,
             title: "Y-모음 (왕복 제스처)",
-            description: "같은 축을 왕복하면 Y-모음이 됩니다.",
+            description: "같은 축을 왕복하면 Y-모음이 됩니다.\n\n또는, 자음 키에서 드래그해 ㅏ·ㅓ·ㅗ·ㅜ를 만든 뒤, 다음 입력으로 ㆍ를 누르면 ㅑ·ㅕ·ㅛ·ㅠ로 바꿀 수 있어요. (예: 하→햐, 모→묘)",
             vowelGestures: [
                 VowelGesture(vowel: "ㅑ", directions: ["→", "←", "→"], label: "오른쪽-왼쪽-오른쪽"),
                 VowelGesture(vowel: "ㅕ", directions: ["←", "→", "←"], label: "왼쪽-오른쪽-왼쪽"),

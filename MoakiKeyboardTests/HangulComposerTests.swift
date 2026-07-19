@@ -223,4 +223,68 @@ final class HangulComposerTests: XCTestCase {
         _ = composer.inputJungseong(.ㅣ)
         XCTAssertEqual(composer.currentComposingCharacter, "계")
     }
+
+    // MARK: - replaceCurrentSyllableVowel (드래그 모음 → 점 단축 변환용 엔진 API)
+
+    func testReplaceCurrentSyllableVowelSucceedsWhenExpectedStateMatches() {
+        _ = composer.inputChoseong(.ㅎ)
+        _ = composer.inputJungseong(.ㅏ)
+        guard case .update? = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㅎ, expectedJungseong: .ㅏ, with: .ㅑ
+        ) else {
+            return XCTFail("모음 교체는 update여야 합니다")
+        }
+        XCTAssertEqual(composer.currentComposingCharacter, "햐")
+    }
+
+    func testReplaceCurrentSyllableVowelFailsOnJungseongMismatch() {
+        _ = composer.inputChoseong(.ㅎ)
+        _ = composer.inputJungseong(.ㅏ)
+        let action = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㅎ, expectedJungseong: .ㅓ, with: .ㅕ
+        )
+        XCTAssertNil(action)
+        XCTAssertEqual(composer.currentComposingCharacter, "하")
+    }
+
+    func testReplaceCurrentSyllableVowelFailsOnChoseongMismatch() {
+        _ = composer.inputChoseong(.ㅎ)
+        _ = composer.inputJungseong(.ㅏ)
+        let action = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㄱ, expectedJungseong: .ㅏ, with: .ㅑ
+        )
+        XCTAssertNil(action)
+        XCTAssertEqual(composer.currentComposingCharacter, "하")
+    }
+
+    func testReplaceCurrentSyllableVowelFailsOnEmptyState() {
+        let action = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㅎ, expectedJungseong: .ㅏ, with: .ㅑ
+        )
+        XCTAssertNil(action)
+        XCTAssertNil(composer.currentComposingCharacter)
+    }
+
+    func testReplaceCurrentSyllableVowelFailsWhenOnlyChoseong() {
+        _ = composer.inputChoseong(.ㅎ)
+        let action = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㅎ, expectedJungseong: .ㅏ, with: .ㅑ
+        )
+        XCTAssertNil(action)
+        XCTAssertEqual(composer.currentComposingCharacter, "ㅎ")
+    }
+
+    func testReplaceCurrentSyllableVowelFailsWhenJongseongPresent() {
+        // 한 = ㅎ + ㅏ + ㄴ
+        _ = composer.inputChoseong(.ㅎ)
+        _ = composer.inputJungseong(.ㅏ)
+        _ = composer.inputChoseong(.ㄴ)
+        XCTAssertEqual(composer.currentComposingCharacter, "한")
+
+        let action = composer.replaceCurrentSyllableVowel(
+            expectedChoseong: .ㅎ, expectedJungseong: .ㅏ, with: .ㅑ
+        )
+        XCTAssertNil(action)
+        XCTAssertEqual(composer.currentComposingCharacter, "한")
+    }
 }

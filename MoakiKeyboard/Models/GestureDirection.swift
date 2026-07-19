@@ -22,19 +22,28 @@ enum GestureDirection: String, CaseIterable {
         return degrees < 0 ? degrees + 360 : degrees
     }
 
-    static func from(vector: CGVector, threshold: CGFloat = 20) -> GestureDirection? {
+    /// - Parameter upSectorExpansionDegrees: 왼쪽 끝 자음 열(ㅃㅂㅁㅋ)에서 위로 드래그할 때
+    ///   손동작이 화면 중앙(오른쪽)으로 휘어져 up이 upRight(ㅣ)로 잘못 분류되는 문제를
+    ///   보정하기 위한 값. 0(기본값)이면 기존과 100% 동일한 경계. up과 upRight 사이의
+    ///   "공유 경계"만 낮추고(80도 → 최소 50도까지), 그 외 모든 섹터(특히 down 계열)는
+    ///   전혀 건드리지 않는다. 0...30으로 클램프한다 — 그 이상이면 upRight 대역(30도
+    ///   하한)과 겹쳐 역전된 Range가 되어 크래시하기 때문이다.
+    static func from(vector: CGVector, threshold: CGFloat = 20, upSectorExpansionDegrees: CGFloat = 0) -> GestureDirection? {
         let magnitude = sqrt(vector.dx * vector.dx + vector.dy * vector.dy)
         guard magnitude >= threshold else { return nil }
 
         let normalizedDegrees = angleDegrees(dx: vector.dx, dy: vector.dy)
 
+        let expansion = min(max(upSectorExpansionDegrees, 0), 30)
+        let upLowerBound: CGFloat = 80 - expansion
+
         // 8 directions with adjusted sectors (wider right-diagonals for ㅣ, ㅡ)
         switch normalizedDegrees {
         case 330...360, 0..<30:
             return .right
-        case 30..<80:
+        case 30..<upLowerBound:
             return .upRight
-        case 80..<120:
+        case upLowerBound..<120:
             return .up
         case 120..<150:
             return .upLeft

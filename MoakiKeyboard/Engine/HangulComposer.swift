@@ -176,6 +176,25 @@ class HangulComposer {
         }
     }
 
+    /// 현재 조합 중인 음절이 정확히 기대하는 choseong·jungseong 조합일 때만 모음을
+    /// 교체한다. 이름을 replaceCurrentJungseong이 아니라 replaceCurrentSyllableVowel로
+    /// 붙인 이유는, 단순히 "현재 jungseong을 바꾼다"가 아니라 "현재 음절 상태가 기대값과
+    /// 정확히 같을 때만 치환한다"는 계약이 이 메서드의 핵심이기 때문이다. 호출부가 어떤
+    /// 상태를 기대하는지 잘못 파악했거나, 그 사이 다른 경로로 조합기 상태가 바뀌었다면
+    /// 안전하게 실패(nil)한다 — 엉뚱한 음절이 바뀌는 것을 엔진 수준에서 차단하는 방어 장치.
+    func replaceCurrentSyllableVowel(
+        expectedChoseong: Choseong,
+        expectedJungseong: Jungseong,
+        with newJungseong: Jungseong
+    ) -> ComposerAction? {
+        guard case .choseongJungseong(let choseong, let jungseong) = state,
+              choseong == expectedChoseong, jungseong == expectedJungseong else {
+            return nil
+        }
+        state = .choseongJungseong(choseong, newJungseong)
+        return .update
+    }
+
     // Try to combine two vowels
     private func combineVowels(_ first: Jungseong, _ second: Jungseong) -> Jungseong? {
         switch (first, second) {

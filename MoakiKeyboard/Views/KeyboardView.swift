@@ -200,6 +200,27 @@ class KeyboardViewModel: ObservableObject {
     /// 토글을 다시 읽어 어긋나는 일이 없도록, 한 제스처 내내 이 값만 참조한다.
     private var isExperimentalYVowelEnabledForCurrentGesture = false
 
+    /// 드래그(또는 접근성 모음 선택)로 기본 모음(ㅏㅓㅗㅜ)이 막 확정됐을 때만 설정된다.
+    /// 다음 입력이 정확히 천지인 "점"이면 이 값을 소비해 모음을 Y계열로 바꾸고, 그 외의
+    /// 어떤 입력이 오든 즉시 무효화된다. choseong까지 함께 저장해, 소비 시점에 조합기의
+    /// 실제 상태와 정확히 일치하는지 엔진 레벨에서 재확인할 수 있게 한다(방어 심화).
+    /// cheonjiinResolver.pendingVowel(천지인 자체의 대기 모음)과는 완전히 별개의 상태다.
+    private struct DirectVowelExtension {
+        let choseong: Choseong
+        let jungseong: Jungseong
+    }
+    private var pendingDirectVowelExtension: DirectVowelExtension?
+
+    private static let dotVowelExtension: [Jungseong: Jungseong] = [
+        .ㅏ: .ㅑ, .ㅓ: .ㅕ, .ㅗ: .ㅛ, .ㅜ: .ㅠ,
+    ]
+
+    /// ㅃㅂㅁㅋ(왼쪽 끝 자음 열, column 1)에서 위로 드래그하면 손동작이 화면 중앙(오른쪽)으로
+    /// 휘어져 ㅗ/ㅛ가 ㅣ로 잘못 인식되는 문제가 실기기에서 보고됐다. 이 열에서 시작한
+    /// 제스처에 한해 up 섹터 경계를 넓혀 보정한다. down 계열 분류나 다른 열에는
+    /// 전혀 영향이 없다. 실기기 테스트로 부족/과함이 확인되면 이 값만 조정할 것.
+    private static let leftEdgeColumnUpSectorExpansionDegrees: CGFloat = 20
+
     weak var delegate: KeyboardViewModelDelegate?
 
     init(
@@ -252,12 +273,47 @@ class KeyboardViewModel: ObservableObject {
         triggerHapticFeedback()
     }
 
+    /// 드래그·접근성 경로에서 방금 입력한 vowel이 하→햐류 단축 확장 대상인지 확인해
+    /// 대기 상태를 건다. vowel 인자만 보고 걸지 않고, 조합기가 실제로 지금 이 모음을
+    /// 가진 .choseongJungseong 상태인지 재확인한 뒤에만 건다 — 호출 경로가 나중에
+    /// 늘어나거나 바뀌어도 엉뚱한 모음에 잘못 대기가 걸리는 일이 없도록 하기 위함이다.
+    /// inputVowel(_:) 내부에는 넣지 않는다 — 그 함수는 천지인 자동확정·다중스트로크
+    /// 확정에서도 호출되므로, 내부에 넣으면 천지인 자체 흐름까지 잘못 대기 상태에 걸린다.
+    private func armDirectVowelExtensionIfEligible(_ vowel: Jungseong) {
+        guard Self.dotVowelExtension[vowel] != nil,
+              case .choseongJungseong(let choseong, let currentVowel) = composer.state,
+              currentVowel == vowel else {
+            pendingDirectVowelExtension = nil
+            return
+        }
+        pendingDirectVowelExtension = DirectVowelExtension(choseong: choseong, jungseong: vowel)
+    }
+
+    /// 대기 중인 단축 확장을 소비한다. 성공하면 CheonjiinResolver는 전혀 건드리지 않고
+    /// true를 반환한다.
+    private func tryExtendPendingVowel() -> Bool {
+        guard let pending = pendingDirectVowelExtension,
+              let extended = Self.dotVowelExtension[pending.jungseong],
+              let action = composer.replaceCurrentSyllableVowel(
+                  expectedChoseong: pending.choseong,
+                  expectedJungseong: pending.jungseong,
+                  with: extended
+              ) else {
+            return false
+        }
+        pendingDirectVowelExtension = nil
+        handleComposerAction(action)
+        triggerHapticFeedback()
+        return true
+    }
+
     // MARK: - VoiceOver 접근성 모음 선택 (실험 없는 별도 입력 경로)
 
     /// 자음 키의 VoiceOver 커스텀 액션에서 호출된다. 오버레이(AccessibilityVowelPickerBar)를
     /// 띄우기만 하고, 실제 조합은 사용자가 모음을 고른 뒤 selectAccessibilityVowel에서 한다.
     func showAccessibilityVowelPicker(for consonant: Choseong) {
         dismissCandidateBars() // 한자/문구 바와 동시에 뜨지 않게 한다
+        pendingDirectVowelExtension = nil
         accessibilityVowelPickerConsonant = consonant
         triggerHapticFeedback()
     }
@@ -270,6 +326,7 @@ class KeyboardViewModel: ObservableObject {
         accessibilityVowelPickerConsonant = nil
         inputConsonant(consonant)
         inputVowel(vowel)
+        armDirectVowelExtensionIfEligible(vowel)
     }
 
     func dismissAccessibilityVowelPicker() {
@@ -280,6 +337,12 @@ class KeyboardViewModel: ObservableObject {
     /// 확장이 막혀 모음이 확정되면 기존 `inputVowel` 경로로 그대로 넘긴다.
     func inputCheonjiinStroke(_ stroke: CheonjiinStroke) {
         dismissCandidateBars()
+
+        if stroke == .dot, tryExtendPendingVowel() {
+            return  // 확장 성공 — CheonjiinResolver는 전혀 건드리지 않는다
+        }
+        pendingDirectVowelExtension = nil  // 점이 아니었거나 확장 실패 — 기회 소멸
+
         let committedVowel = cheonjiinResolver.input(stroke)
         cheonjiinAutoCommitTimer?.invalidate()
         cheonjiinAutoCommitTimer = nil
@@ -492,7 +555,7 @@ class KeyboardViewModel: ObservableObject {
         didHandleLongPressNumberInCurrentGesture = false
         activeKey = (row, column)
         gestureStartPoint = point
-        gestureAnalyzer.reset()
+        gestureAnalyzer.reset(upSectorExpansionDegrees: column == 1 ? Self.leftEdgeColumnUpSectorExpansionDegrees : 0)
         gestureAnalyzer.addPoint(point)
         gestureDirections = []
         previewVowel = nil
@@ -583,6 +646,7 @@ class KeyboardViewModel: ObservableObject {
                 }
                 if let vowel = decision.vowel {
                     inputVowel(vowel)
+                    armDirectVowelExtensionIfEligible(vowel)
                 }
             }
 
@@ -625,6 +689,7 @@ class KeyboardViewModel: ObservableObject {
     func resetComposer() {
         // Reset composer state when text field changes externally
         // (e.g., when user sends a message and the app clears the field)
+        pendingDirectVowelExtension = nil
         stopBackspaceRepeat()
         cheonjiinAutoCommitTimer?.invalidate()
         cheonjiinAutoCommitTimer = nil
@@ -672,6 +737,7 @@ class KeyboardViewModel: ObservableObject {
     /// 천지인 스트로크가 아닌 다른 입력(자음, 기호, 삭제, 스페이스 등)이 들어오기
     /// 직전에 호출해서, 미완성 상태로 남은 모음이 유실되지 않게 한다.
     private func flushPendingCheonjiin() {
+        pendingDirectVowelExtension = nil
         cheonjiinAutoCommitTimer?.invalidate()
         cheonjiinAutoCommitTimer = nil
         if let vowel = cheonjiinResolver.flush() {

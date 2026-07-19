@@ -86,4 +86,44 @@ final class GestureDirectionTests: XCTestCase {
         XCTAssertEqual(GestureDirection.angleDegrees(dx: v.dx, dy: v.dy), 90, accuracy: 0.001)
         XCTAssertEqual(GestureDirection.from(vector: v), .up)
     }
+
+    // MARK: - upSectorExpansionDegrees (왼쪽 끝 자음 열 위쪽 드래그 오인식 보정)
+
+    private func assertDirection(_ degrees: CGFloat, upSectorExpansionDegrees: CGFloat, is expected: GestureDirection, line: UInt = #line) {
+        let result = GestureDirection.from(vector: vector(forDegrees: degrees), upSectorExpansionDegrees: upSectorExpansionDegrees)
+        XCTAssertEqual(result, expected, "각도 \(degrees)도(확장 \(upSectorExpansionDegrees)도)가 \(expected)로 분류되어야 함", line: line)
+    }
+
+    func testExpansionZeroKeepsExistingBoundaryUnchanged() {
+        assertDirection(78.9, upSectorExpansionDegrees: 0, is: .upRight)
+        assertDirection(80.1, upSectorExpansionDegrees: 0, is: .up)
+    }
+
+    // 60도는 무리수 삼각비가 끼는 각도라 degrees→벡터→atan2 왕복 시 부동소수점 오차로
+    // 59.99999999999999가 나올 수 있다(파일 상단 testBoundary29And30... 등과 동일한 이유).
+    // 정확히 60도 대신 ±0.1도 여유를 둔다.
+    func testExpansion20MovesUpUpRightBoundaryTo60Degrees() {
+        assertDirection(59.9, upSectorExpansionDegrees: 20, is: .upRight)
+        assertDirection(60.1, upSectorExpansionDegrees: 20, is: .up)
+    }
+
+    func testExpansion20DoesNotTouchUpUpLeftBoundary() {
+        assertDirection(119, upSectorExpansionDegrees: 20, is: .up)
+        assertDirection(121, upSectorExpansionDegrees: 20, is: .upLeft)
+    }
+
+    func testExpansion20DoesNotAffectSectorsUnrelatedToUp() {
+        assertDirection(300, upSectorExpansionDegrees: 20, is: .downRight)
+        assertDirection(270, upSectorExpansionDegrees: 20, is: .down)
+        assertDirection(180, upSectorExpansionDegrees: 20, is: .left)
+    }
+
+    func testExpansionClampsToUpperBound30() {
+        assertDirection(49, upSectorExpansionDegrees: 60, is: .upRight)
+        assertDirection(51, upSectorExpansionDegrees: 60, is: .up)
+    }
+
+    func testExpansionClampsNegativeToZero() {
+        assertDirection(70, upSectorExpansionDegrees: -10, is: .upRight)
+    }
 }

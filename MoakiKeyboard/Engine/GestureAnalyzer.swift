@@ -45,6 +45,12 @@ class GestureAnalyzer {
     private let reversalThreshold: CGFloat
     private let directionChangeThreshold: CGFloat
 
+    /// 왼쪽 끝 자음 열(ㅃㅂㅁㅋ)에서 위로 드래그할 때 손동작이 화면 중앙(오른쪽)으로
+    /// 휘어져 up이 upRight(ㅣ)로 잘못 분류되는 문제를 보정하기 위해, KeyboardViewModel이
+    /// `reset(upSectorExpansionDegrees:)`로 제스처 시작 시점에 한 번 설정한다. 0(기본값)이면
+    /// 기존과 100% 동일하게 동작한다.
+    private var currentUpSectorExpansionDegrees: CGFloat = 0
+
     /// 인접한(예: ↑ 다음 ↗) 방향으로의 전환에 요구되는 거리. 손목을 돌리며 긋는
     /// 자연스러운 손동작은 완전히 다른 방향으로 튀는 일 없이 인접한 방향으로만
     /// 서서히 휘어지는 경우가 많아서, 일반 `directionChangeThreshold`보다 더 확실한
@@ -62,11 +68,15 @@ class GestureAnalyzer {
         self.adjacentDirectionChangeThreshold = adjacentDirectionChangeThreshold ?? directionChangeThreshold * 1.5
     }
 
-    func reset() {
+    /// - Parameter upSectorExpansionDegrees: 이번 제스처에 적용할 up 섹터 확장값. 기본값
+    ///   0으로 반드시 덮어쓴다 — 조건부로만 대입하면 이전 제스처의 확장값이 다음 제스처로
+    ///   새는 회귀가 생긴다(예: 왼쪽 끝 열 다음에 다른 열을 눌러도 보정이 남아있는 버그).
+    func reset(upSectorExpansionDegrees: CGFloat = 0) {
         touchPoints.removeAll()
         directions.removeAll()
         directionMagnitudes.removeAll()
         lastDirectionChangePoint = nil
+        currentUpSectorExpansionDegrees = upSectorExpansionDegrees
 
         yVowelPhase = .idle
         yVowelOriginPoint = nil
@@ -98,6 +108,13 @@ class GestureAnalyzer {
         return touchPoints.first
     }
 
+    /// GestureDirection.from(vector:threshold:)를 직접 호출하는 모든 지점은 반드시 이
+    /// 헬퍼를 거친다 — currentUpSectorExpansionDegrees를 매번 손으로 전달할 필요 없이
+    /// 한 곳에서만 관리한다.
+    private func classifyDirection(vector: CGVector, threshold: CGFloat) -> GestureDirection? {
+        GestureDirection.from(vector: vector, threshold: threshold, upSectorExpansionDegrees: currentUpSectorExpansionDegrees)
+    }
+
     private func analyzeLatestMovement() {
         guard touchPoints.count >= 2 else { return }
 
@@ -112,13 +129,13 @@ class GestureAnalyzer {
         let magnitude = sqrt(vector.dx * vector.dx + vector.dy * vector.dy)
 
         // Try detecting direction with standard threshold first
-        var newDirection = GestureDirection.from(vector: vector, threshold: threshold)
+        var newDirection = classifyDirection(vector: vector, threshold: threshold)
 
         // If standard threshold fails, try lower reversal threshold for opposite directions.
         // Real fingers rarely retrace the exact reverse angle, so this also accepts a
         // candidate that's adjacent to the true opposite (see `isReversal(of:)`).
         if newDirection == nil, let lastDirection = directions.last, magnitude >= reversalThreshold {
-            if let candidate = GestureDirection.from(vector: vector, threshold: reversalThreshold),
+            if let candidate = classifyDirection(vector: vector, threshold: reversalThreshold),
                candidate.isReversal(of: lastDirection, isFirstStroke: directions.count == 1) {
                 newDirection = candidate
             }
@@ -138,7 +155,7 @@ class GestureAnalyzer {
             // overshot the threshold before turning.
             if let lastDirection = directions.last,
                magnitude > 0,
-               GestureDirection.from(vector: vector, threshold: 0.01) == lastDirection {
+               classifyDirection(vector: vector, threshold: 0.01) == lastDirection {
                 lastDirectionChangePoint = currentPoint
             }
             return
@@ -249,7 +266,7 @@ class GestureAnalyzer {
     private func handleYVowelIdlePhase(dx: CGFloat, dy: CGFloat, distanceFromOrigin: CGFloat) {
         if firstMeaningfulDirection == nil {
             guard distanceFromOrigin >= threshold else { return }
-            guard let direction = GestureDirection.from(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
+            guard let direction = classifyDirection(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
                 return
             }
             firstMeaningfulAngle = GestureDirection.angleDegrees(dx: dx, dy: dy)
@@ -266,7 +283,7 @@ class GestureAnalyzer {
         guard let firstDirection = firstMeaningfulDirection,
               let firstAngle = firstMeaningfulAngle,
               distanceFromOrigin >= yVowelOutboundEntryDistance,
-              let currentDirection = GestureDirection.from(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
+              let currentDirection = classifyDirection(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
             return
         }
 
@@ -304,7 +321,7 @@ class GestureAnalyzer {
         guard distanceFromOrigin >= yVowelRedepartureDistance,
               let outboundDirection = yVowelOutboundDirection,
               let outboundAngle = yVowelOutboundAngle,
-              let currentDirection = GestureDirection.from(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
+              let currentDirection = classifyDirection(vector: CGVector(dx: dx, dy: dy), threshold: threshold) else {
             return
         }
 
