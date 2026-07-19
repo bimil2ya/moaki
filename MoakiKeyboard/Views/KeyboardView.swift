@@ -183,6 +183,13 @@ class KeyboardViewModel: ObservableObject {
     /// 마지막 천지인 스트로크 이후 이 시간 동안 다음 스트로크가 없으면 대기 중인
     /// 모음을 자동으로 확정한다. 실제 천지인 키패드처럼, ㅏ(ㅣㆍ)나 ㅑ(ㅣㆍㆍ)처럼
     /// 서로 앞부분이 겹치는 모음을 시간차로 구분하기 위함이다.
+    ///
+    /// 이 값을 줄이면 단일 스트로크(ㅡ/ㅣ/ㆍ 단독)는 더 빨리 확정되어 반응이 즉각적으로
+    /// 느껴지지만, 두 번째 스트로크(예: ㅡ 다음 ㆍ로 ㅜ를 만드는 조합)가 이 시간 안에
+    /// 도착하지 못하면 첫 스트로크가 먼저 조급하게 확정되어 조합 자체가 깨진다(실제로
+    /// 0.3초로 줄였다가 "ㄹ+ㅡ+ㆍ가 루가 아니라 르로 끊긴다"는 회귀가 발생해 0.45초로
+    /// 되돌렸다). 이 값을 다시 조정할 때는 반드시 두 스트로크 조합(ㅡ+ㆍ=ㅜ, ㅣ+ㆍ=ㅏ 등)이
+    /// 실기기에서 여전히 잘 되는지 확인할 것.
     private let cheonjiinAutoCommitDelay: TimeInterval
     private var cheonjiinAutoCommitTimer: Timer?
 
@@ -198,7 +205,7 @@ class KeyboardViewModel: ObservableObject {
     init(
         backspaceRepeatInitialDelay: TimeInterval = 0.4,
         backspaceRepeatInterval: TimeInterval = 0.08,
-        cheonjiinAutoCommitDelay: TimeInterval = 0.3,
+        cheonjiinAutoCommitDelay: TimeInterval = 0.45,
         experimentalYVowelEnabledProvider: @escaping () -> Bool = { ExperimentalYVowelSettings.isEnabled() }
     ) {
         self.backspaceRepeatInitialDelay = backspaceRepeatInitialDelay

@@ -258,7 +258,7 @@ struct KeyView: View {
             return isPressed || isHighlighted ? Color(.systemGray3) : Color(.systemGray5)
         case .consonant(let consonant):
             if Self.highlightedRowConsonants.contains(consonant) {
-                return isPressed || isHighlighted ? Color.blue.opacity(0.35) : Color.blue.opacity(0.15)
+                return isPressed || isHighlighted ? Color.blue.opacity(0.175) : Color.blue.opacity(0.075)
             }
             return isPressed || isHighlighted ? Color(.systemGray4) : Color(.secondarySystemBackground)
         }
