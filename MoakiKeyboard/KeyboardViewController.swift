@@ -8,6 +8,15 @@ class KeyboardViewController: UIInputViewController {
     private var feedbackGenerator: UIImpactFeedbackGenerator?
     private var heightConstraint: NSLayoutConstraint?
 
+    /// 이 확장 자체가 텍스트를 편집하는 동안(insertText/deleteBackward/커서 이동)만 true다.
+    /// textDidChange/selectionDidChange가 우리 자신의 편집 때문에 불렸는지, 아니면
+    /// 외부(자동완성, 붙여넣기, 호스트 앱, 커서를 직접 탭해서 옮기는 것 등) 때문에
+    /// 불렸는지 구분하는 데 쓴다. 편집 호출 직후 다음 런루프로 미뤄서 0으로 되돌리는
+    /// 이유는, textDidChange가 항상 같은 실행 컨텍스트에서 동기적으로 오지 않을 수
+    /// 있어서 그 콜백이 실제로 오기 전에 플래그가 꺼지지 않게 하기 위함이다.
+    private var ownEditDepth = 0
+    private var isPerformingOwnEdit: Bool { ownEditDepth > 0 }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -59,6 +68,17 @@ class KeyboardViewController: UIInputViewController {
         viewModel.resetGestureState()
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+
+        // 다른 키보드로 전환하거나 앱이 백그라운드로 갈 때, 천지인 조합 대기 중인
+        // 모음이 있으면 이 시점에 확정한다(기존에 자음/기호 입력 등 다른 전환 시
+        // flushPendingCheonjiin을 부르던 것과 동일한 원칙 — 대기 상태를 조용히
+        // 버리지 않고 확정한다). 안 그러면 최대 0.45초짜리 자동확정 타이머가 화면이
+        // 사라진 뒤에도 계속 살아있다가, 나중에 엉뚱한 시점에 입력을 실행할 수 있다.
+        viewModel.flushPendingStateBeforeDisappearing()
+    }
+
     private func setupKeyboardView() {
         let rootView = KeyboardView(viewModel: viewModel).ignoresSafeArea(.all)
         let hostingController = UIHostingController(rootView: rootView)
@@ -89,12 +109,32 @@ class KeyboardViewController: UIInputViewController {
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
-        // Reset composer state when text field is cleared externally
-        // (e.g., when user sends a message and the app clears the input field)
-        // Only reset if the text field is completely empty
-        if textDocumentProxy.documentContextBeforeInput == nil &&
-           textDocumentProxy.documentContextAfterInput == nil {
-            viewModel.resetComposer()
+        guard !isPerformingOwnEdit else { return }
+
+        // 우리가 시킨 게 아닌 텍스트 변경(자동완성, 붙여넣기, 호스트 앱이 직접
+        // 텍스트를 바꾸는 경우 등) — 우리가 추적하던 조합 상태가 실제 텍스트와
+        // 어긋났을 수 있으므로, 무언가를 더 지우거나 고치려 하지 않고 조용히
+        // 내부 상태만 버린다.
+        viewModel.resetComposer()
+    }
+
+    override func selectionDidChange(_ textInput: UITextInput?) {
+        guard !isPerformingOwnEdit else { return }
+
+        // 우리가 시킨 게 아닌 커서 이동(사용자가 텍스트의 다른 위치를 직접 탭하는
+        // 경우 등) — 조합 중이던 위치가 더 이상 유효하지 않으므로 안전하게 버린다.
+        viewModel.resetComposer()
+    }
+
+    /// KeyboardViewModelDelegate의 텍스트 편집 메서드(insertText/deleteBackward/
+    /// updateComposingText/moveCursor)를 감싸서, 그로 인해 발생하는
+    /// textDidChange/selectionDidChange가 "우리 자신의 편집"으로 인식되게 한다.
+    private func performOwnEdit(_ body: () -> Void) {
+        ownEditDepth += 1
+        body()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.ownEditDepth = max(0, self.ownEditDepth - 1)
         }
     }
 }
@@ -102,26 +142,31 @@ class KeyboardViewController: UIInputViewController {
 // MARK: - KeyboardViewModelDelegate
 extension KeyboardViewController: KeyboardViewModelDelegate {
     func insertText(_ text: String) {
-        textDocumentProxy.insertText(text)
+        performOwnEdit {
+            textDocumentProxy.insertText(text)
+        }
     }
 
     func deleteBackward() {
-        textDocumentProxy.deleteBackward()
+        performOwnEdit {
+            textDocumentProxy.deleteBackward()
+        }
     }
 
     func updateComposingText(from previous: String, to current: String) {
         // iOS keyboard extensions don't support marked text directly,
         // so we simulate it by deleting the previous composing text
         // and inserting the new composing text.
+        performOwnEdit {
+            // Delete previous composing characters
+            for _ in previous {
+                textDocumentProxy.deleteBackward()
+            }
 
-        // Delete previous composing characters
-        for _ in previous {
-            textDocumentProxy.deleteBackward()
-        }
-
-        // Insert new composing characters
-        if !current.isEmpty {
-            textDocumentProxy.insertText(current)
+            // Insert new composing characters
+            if !current.isEmpty {
+                textDocumentProxy.insertText(current)
+            }
         }
     }
 
@@ -135,7 +180,9 @@ extension KeyboardViewController: KeyboardViewModelDelegate {
     }
 
     func moveCursor(byCharacterOffset offset: Int) {
-        textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+        performOwnEdit {
+            textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+        }
     }
 
     func characterBeforeCursor() -> Character? {

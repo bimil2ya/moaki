@@ -656,6 +656,16 @@ class KeyboardViewModel: ObservableObject {
         isExperimentalYVowelEnabledForCurrentGesture = false
     }
 
+    /// 키보드 확장 뷰가 화면에서 사라지기 직전(다른 키보드로 전환, 앱 백그라운드
+    /// 전환 등)에 호출된다. 천지인 조합 대기 중인 모음이 있으면 자음/기호 입력 등
+    /// 다른 전환 시점과 동일한 원칙으로 확정해서 조용히 버리지 않는다 — 이렇게
+    /// 안 하면 최대 0.45초짜리 자동확정 타이머가 뷰가 사라진 뒤에도 계속 살아있다가
+    /// 나중에 엉뚱한 시점(다른 앱으로 전환된 뒤 등)에 입력을 실행할 수 있다.
+    func flushPendingStateBeforeDisappearing() {
+        flushPendingCheonjiin()
+        resetGestureState()
+    }
+
     // MARK: - Private Helpers
 
     /// 천지인 버퍼에 확정 대기 중인 모음이 있으면 확정해서 흘려보낸다.
