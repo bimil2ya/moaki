@@ -244,13 +244,22 @@ struct KeyView: View {
         }
     }
 
+    /// ㅁㄴㅇㄹㅎ 줄(3번째 줄)만 다른 자음과 구별되도록 연한 파란 틴트를 준다.
+    /// 사용자가 다른 키보드(삼성 모아키 등) 습관 때문에 이 줄 위치를 시각적
+    /// 기준점으로 삼고 싶어해서 추가됨 — 마음에 안 들면 되돌릴 수 있도록
+    /// 이 한 곳(backgroundColor)에만 분기를 둔다.
+    private static let highlightedRowConsonants: Set<Choseong> = [.ㅁ, .ㄴ, .ㅇ, .ㄹ, .ㅎ]
+
     private var backgroundColor: Color {
         switch content {
         case .backspace:
             return isPressed || isHighlighted ? Color(.systemGray3) : Color(.systemGray5)
         case .symbol, .cheonjiinStroke:
             return isPressed || isHighlighted ? Color(.systemGray3) : Color(.systemGray5)
-        case .consonant:
+        case .consonant(let consonant):
+            if Self.highlightedRowConsonants.contains(consonant) {
+                return isPressed || isHighlighted ? Color.blue.opacity(0.35) : Color.blue.opacity(0.15)
+            }
             return isPressed || isHighlighted ? Color(.systemGray4) : Color(.secondarySystemBackground)
         }
     }

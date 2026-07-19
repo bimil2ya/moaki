@@ -3,7 +3,6 @@ import Combine
 
 struct KeyboardView: View {
     @ObservedObject var viewModel: KeyboardViewModel
-    @ObservedObject var settings = KeyboardSettings.shared
 
     var body: some View {
         GeometryReader { geometry in
@@ -19,7 +18,11 @@ struct KeyboardView: View {
                         totalWidth: geometry.size.width,
                         isSymbolMode: viewModel.isSymbolMode,
                         activeKey: viewModel.activeKey,
-                        previewVowel: viewModel.previewVowel,
+                        // 드래그로 만들어질 모음을 미리 보여주는 건 도움이 안 된다는 판단하에
+                        // 뺐다 — 방향 제스처가 진행 중(gestureDirections가 비어있지 않음)일 때는
+                        // previewVowel을 안 보여주고, 천지인 스트로크 대기 중(방향 없이 대기
+                        // 모음만 있는 경우)에는 그대로 보여준다.
+                        previewVowel: viewModel.gestureDirections.isEmpty ? viewModel.previewVowel : nil,
                         onConsonantTap: { consonant in
                             viewModel.inputConsonant(consonant)
                         },
@@ -81,14 +84,16 @@ struct KeyboardView: View {
                 }
                 .padding(KeyboardMetrics.keySpacing)
 
-                // 제스처 방향 힌트는 설정으로 켠 경우에만, 천지인 대기 모음 미리보기는
-                // (드래그 방향 없이 previewVowel만 있는 경우) 설정과 무관하게 항상 보여준다.
+                // 드래그 방향 화살표 + 예상 모음을 띄우는 건 실사용에 도움이 안 된다는
+                // 판단하에 제거했다 — 실제로 입력됐는지는 텍스트 필드에서 확인하면 충분하고,
+                // 드래그 자체가 인식되고 있다는 건 햅틱(gestureMoved 참고)과 키 눌림
+                // 배경색 변화로만 알려준다. 천지인 스트로크 대기 모음 미리보기(방향 없이
+                // previewVowel만 있는 경우)는 여러 탭을 조합하는 동안 꼭 필요해서 유지한다.
                 let isCheonjiinPreview = viewModel.gestureDirections.isEmpty && viewModel.previewVowel != nil
-                if (settings.showGesturePreview || isCheonjiinPreview) && !viewModel.isSymbolMode {
+                if isCheonjiinPreview && !viewModel.isSymbolMode {
                     GestureOverlayView(
-                        directions: viewModel.gestureDirections,
                         startPoint: viewModel.gestureStartPoint,
-                        currentVowel: viewModel.previewVowel
+                        pendingVowel: viewModel.previewVowel
                     )
                 }
 
@@ -172,6 +177,8 @@ class KeyboardViewModel: ObservableObject {
     private var backspaceInitialDelayTimer: Timer?
     private var backspaceRepeatTimer: Timer?
     private var didHandleLongPressNumberInCurrentGesture = false
+    /// gestureMoved에서 새 방향 세그먼트가 등록될 때만 햅틱을 울리기 위한 카운터.
+    private var lastHapticDirectionCount = 0
 
     /// 마지막 천지인 스트로크 이후 이 시간 동안 다음 스트로크가 없으면 대기 중인
     /// 모음을 자동으로 확정한다. 실제 천지인 키패드처럼, ㅏ(ㅣㆍ)나 ㅑ(ㅣㆍㆍ)처럼
@@ -191,7 +198,7 @@ class KeyboardViewModel: ObservableObject {
     init(
         backspaceRepeatInitialDelay: TimeInterval = 0.4,
         backspaceRepeatInterval: TimeInterval = 0.08,
-        cheonjiinAutoCommitDelay: TimeInterval = 0.45,
+        cheonjiinAutoCommitDelay: TimeInterval = 0.3,
         experimentalYVowelEnabledProvider: @escaping () -> Bool = { ExperimentalYVowelSettings.isEnabled() }
     ) {
         self.backspaceRepeatInitialDelay = backspaceRepeatInitialDelay
@@ -482,6 +489,7 @@ class KeyboardViewModel: ObservableObject {
         gestureAnalyzer.addPoint(point)
         gestureDirections = []
         previewVowel = nil
+        lastHapticDirectionCount = 0
         isExperimentalYVowelEnabledForCurrentGesture = experimentalYVowelEnabledProvider()
     }
 
@@ -489,6 +497,13 @@ class KeyboardViewModel: ObservableObject {
         gestureAnalyzer.addPoint(point)
         let directions = gestureAnalyzer.getDirections()
         gestureDirections = directions
+
+        // 방향이 새로 하나 등록될 때마다 햅틱으로만 "인식됐다"는 걸 알려준다.
+        // 어떤 모음이 될지는 보여주지 않는다 — 실제 결과는 텍스트 필드에서 확인.
+        if directions.count > lastHapticDirectionCount {
+            lastHapticDirectionCount = directions.count
+            triggerHapticFeedback()
+        }
 
         // Update preview vowel (only meaningful for consonant keys)
         previewVowel = experimentalOverriddenPreviewVowel(existingPreview: vowelResolver.peekVowel(directions: directions))
