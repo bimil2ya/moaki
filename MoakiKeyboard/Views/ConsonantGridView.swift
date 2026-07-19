@@ -25,11 +25,14 @@ struct KeyGridView: View {
                     ForEach(0..<columnCount, id: \.self) { column in
                         let content = KeyboardMetrics.keyContent(at: row, column: column, isSymbolMode: isSymbolMode)
                         let isActive = activeKey?.row == row && activeKey?.column == column
-                        let longPressNumber = isSymbolMode ? nil : KeyboardMetrics.longPressNumber(at: row, column: column)
+                        // 숫자 롱프레스가 없는 자음 키(ㅋㅌㅊㅍ)는 사용자 지정 문구로 대체한다.
+                        let longPressNumber = isSymbolMode ? nil :
+                            (KeyboardMetrics.longPressNumber(at: row, column: column) ?? snippetLongPressValue(for: content))
                         let width = KeyboardMetrics.keyWidth(
                             for: column,
                             row: row,
-                            centerKeyWidth: centerKeyWidth
+                            centerKeyWidth: centerKeyWidth,
+                            isSymbolMode: isSymbolMode
                         )
 
                         KeyView(
@@ -38,6 +41,7 @@ struct KeyGridView: View {
                             isPressed: isActive,
                             previewVowel: isActive ? previewVowel : nil,
                             longPressNumber: longPressNumber,
+                            directionalLongPressOptions: isSymbolMode ? nil : directionalLongPressOptions(for: content),
                             onLongPress: { number in
                                 onLongPressNumber(number)
                             },
@@ -63,6 +67,17 @@ struct KeyGridView: View {
                 }
             }
         }
+    }
+
+    private func snippetLongPressValue(for content: KeyContent?) -> String? {
+        guard case .consonant(let choseong) = content else { return nil }
+        return SnippetSettings.snippet(for: choseong)
+    }
+
+    /// ㅡ 키를 길게 누르면 상하좌우에 문장부호 후보가 뜬다: 위=",", 아래=".", 왼쪽="!", 오른쪽="?".
+    private func directionalLongPressOptions(for content: KeyContent?) -> DirectionalLongPressOptions? {
+        guard case .cheonjiinStroke(.eu) = content else { return nil }
+        return DirectionalLongPressOptions(up: ",", down: ".", left: "!", right: "?")
     }
 }
 
