@@ -53,4 +53,12 @@ final class SnippetSettingsTests: XCTestCase {
         defaults.set(["안녕하세요", "", "감사합니다"], forKey: SnippetSettings.extraSnippetsKey)
         XCTAssertEqual(SnippetSettings.extraSnippets(defaults: defaults), ["안녕하세요", "감사합니다"])
     }
+
+    /// 호스트 앱(`ios-moaki/SnippetSettingsView.swift`)과 값이 반드시 같아야 하는
+    /// 리터럴을 고정 문자열과 대조한다. (`userDefaultsKey(for:)`의 ㅋㅌㅊㅍ 리터럴은
+    /// `testUserDefaultsKeyForRegisteredConsonants`가 이미 고정 문자열로 대조하고
+    /// 있어 중복 추가하지 않는다.)
+    func testExtraSnippetsKeyMatchesExpectedString() {
+        XCTAssertEqual(SnippetSettings.extraSnippetsKey, "snippet.extra")
+    }
 }

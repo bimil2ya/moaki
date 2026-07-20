@@ -6,8 +6,8 @@ import SwiftUI
 /// 코드를 공유하지 못하고 이렇게 나뉘어 있다).
 struct GestureSensitivitySettingsView: View {
     private let appGroupID = AppGroupConstants.appGroupID
-    private let multiplierKey = "gestureSensitivityMultiplier"
-    private let range: ClosedRange<Double> = 0.7...1.5
+    static let multiplierKey = "gestureSensitivityMultiplier"
+    static let range: ClosedRange<Double> = 0.7...1.5
 
     @State private var multiplier: Double = 1.0
 
@@ -34,7 +34,7 @@ struct GestureSensitivitySettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    Slider(value: $multiplier, in: range, step: 0.05) {
+                    Slider(value: $multiplier, in: Self.range, step: 0.05) {
                         Text("제스처 인식 거리")
                     } onEditingChanged: { isEditing in
                         if !isEditing {
@@ -58,15 +58,15 @@ struct GestureSensitivitySettingsView: View {
     }
 
     private func load() {
-        guard let stored = defaults?.object(forKey: multiplierKey) as? Double else {
+        guard let stored = defaults?.object(forKey: Self.multiplierKey) as? Double else {
             multiplier = 1.0
             return
         }
-        multiplier = min(max(stored, range.lowerBound), range.upperBound)
+        multiplier = min(max(stored, Self.range.lowerBound), Self.range.upperBound)
     }
 
     private func save() {
-        defaults?.set(multiplier, forKey: multiplierKey)
+        defaults?.set(multiplier, forKey: Self.multiplierKey)
     }
 }
 

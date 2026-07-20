@@ -3,16 +3,23 @@ import XCTest
 /// KVM: Y계열(ㅑㅕㅛㅠ) 원점 복귀 인식기(실험적 기능)의 KeyboardViewModel 연결 테스트.
 /// GestureAnalyzer 자체의 상태머신 정확성은 GestureAnalyzerTests(GAT)에서 이미 검증했으므로,
 /// 여기서는 오직 "토글 게이팅·캐시 시점·카운터 기록 시점"이라는 배선(wiring)만 다룬다.
+@MainActor
 final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
     private var delegate: SpyKeyboardDelegate!
+    private var suiteName = ""
+    private var defaults: UserDefaults!
 
-    override func setUp() {
-        super.setUp()
+    override func setUpWithError() throws {
         delegate = SpyKeyboardDelegate()
+        suiteName = "test-\(UUID().uuidString)"
+        defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
     override func tearDown() {
         delegate = nil
+        if !suiteName.isEmpty {
+            UserDefaults().removePersistentDomain(forName: suiteName)
+        }
         super.tearDown()
     }
 
@@ -30,7 +37,10 @@ final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
     }
 
     func testToggleOnAppliesYVowelAndProducesExpectedSyllable() {
-        let viewModel = KeyboardViewModel(experimentalYVowelEnabledProvider: { true })
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { true },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         viewModel.delegate = delegate
 
         feedRightRoundTripGesture(on: viewModel)
@@ -44,14 +54,24 @@ final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
     /// 우연히 같아질 수 있으므로, "다르다"가 아니라 "OFF는 기본 설정과 동일하게
     /// 동작한다"만 검증한다. 게이팅 자체는 카운터 기반 테스트(아래)로 별도 검증한다.
     func testToggleOffMatchesDefaultBehavior() {
-        let viewModelOff = KeyboardViewModel(experimentalYVowelEnabledProvider: { false })
+        let viewModelOff = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         let delegateOff = SpyKeyboardDelegate()
         viewModelOff.delegate = delegateOff
         feedRightRoundTripGesture(on: viewModelOff)
 
-        // 기본 생성자(진짜 설정을 읽음, 테스트 환경에서는 기본 OFF)와 결과가 완전히 같아야
-        // "이 기능이 존재하기 전과 100% 동일하게 동작한다"는 것을 보여줄 수 있다.
-        let viewModelDefault = KeyboardViewModel()
+        // 진짜 기본 provider(ExperimentalYVowelSettings.isEnabled())가 내부적으로
+        // 위임하는 것과 정확히 같은 isEnabled(defaults:) 구현을, 항상 비어있는(false)
+        // 임시 suite로 고정해 실행한다 — "같은 판독 구현을 격리된 빈 suite에서 실행해
+        // 기본값 false를 안정적으로 재현한다"는 의도적으로 좁힌 경계다(실제 App Group의
+        // 환경 의존적인 현재 값을 그대로 읽으면 테스트가 기기·시뮬레이터 상태에 따라
+        // 흔들릴 수 있어서다).
+        let viewModelDefault = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { [defaults] in ExperimentalYVowelSettings.isEnabled(defaults: defaults) },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         let delegateDefault = SpyKeyboardDelegate()
         viewModelDefault.delegate = delegateDefault
         feedRightRoundTripGesture(on: viewModelDefault)
@@ -65,10 +85,12 @@ final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
     func testToggleIsCachedAtGestureStartAndIgnoresMidGestureChanges() {
         final class ToggleBox { var value = false }
         let box = ToggleBox()
-        let viewModel = KeyboardViewModel(experimentalYVowelEnabledProvider: { box.value })
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { box.value },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         viewModel.delegate = delegate
-        let suite = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        let before = ExperimentalYVowelSettings.appliedCount()
+        let before = ExperimentalYVowelSettings.appliedCount(defaults: defaults)
 
         // 첫 제스처: 시작 시점엔 false로 캐시됨.
         viewModel.gestureStarted(row: 1, column: 1, at: CGPoint(x: 0, y: 0))
@@ -81,48 +103,44 @@ final class KeyboardViewModelExperimentalYVowelTests: XCTestCase {
         viewModel.gestureMoved(to: CGPoint(x: 45, y: 0))
         viewModel.gestureEnded(row: 1, column: 1)
 
-        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(), before,
+        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(defaults: defaults), before,
                        "제스처 시작 시점에 캐시된 값(false)이 유지되어 카운터가 늘면 안 됨")
 
         // 두 번째 제스처: 이번엔 시작 시점에 실제로 true이므로 새로 캐시되어 반영되어야 한다.
         feedRightRoundTripGesture(on: viewModel)
-        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(), before + 1,
+        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(defaults: defaults), before + 1,
                        "다음 제스처는 새로 캐시된 값(true)을 반영해야 함")
-
-        suite?.set(before, forKey: ExperimentalYVowelSettings.appliedCountKey)
     }
 
     // KVM-2: 카운터는 handleKoreanModeGesture(실제 입력 확정 지점)에서만, 제스처당 정확히 1회 기록된다.
 
     func testAppliedCounterIncrementsExactlyOncePerGestureRegardlessOfPreviewCallCount() {
-        let suite = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        let before = ExperimentalYVowelSettings.appliedCount()
+        let before = ExperimentalYVowelSettings.appliedCount(defaults: defaults)
 
-        let viewModel = KeyboardViewModel(experimentalYVowelEnabledProvider: { true })
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { true },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         viewModel.delegate = delegate
 
         // gestureMoved(미리보기 경로)는 여러 번 호출되지만, 카운터는 gestureEnded 시점에만 늘어야 한다.
         feedRightRoundTripGesture(on: viewModel)
 
-        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(), before + 1, "제스처당 정확히 1회만 증가해야 함")
-
-        // 정리: 테스트가 전역 앱그룹 카운터를 오염시키지 않도록 원래 값으로 되돌린다.
-        suite?.set(before, forKey: ExperimentalYVowelSettings.appliedCountKey)
+        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(defaults: defaults), before + 1, "제스처당 정확히 1회만 증가해야 함")
     }
 
     func testCounterDoesNotIncrementWhenToggleIsOff() {
-        let suite = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        let beforeApplied = ExperimentalYVowelSettings.appliedCount()
-        let beforeConflict = ExperimentalYVowelSettings.conflictOverrideCount()
+        let beforeApplied = ExperimentalYVowelSettings.appliedCount(defaults: defaults)
+        let beforeConflict = ExperimentalYVowelSettings.conflictOverrideCount(defaults: defaults)
 
-        let viewModel = KeyboardViewModel(experimentalYVowelEnabledProvider: { false })
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { [defaults] in ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0, defaults: defaults) }
+        )
         viewModel.delegate = delegate
         feedRightRoundTripGesture(on: viewModel)
 
-        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(), beforeApplied, "토글 OFF면 appliedCount가 늘면 안 됨")
-        XCTAssertEqual(ExperimentalYVowelSettings.conflictOverrideCount(), beforeConflict)
-
-        suite?.set(beforeApplied, forKey: ExperimentalYVowelSettings.appliedCountKey)
-        suite?.set(beforeConflict, forKey: ExperimentalYVowelSettings.conflictOverrideCountKey)
+        XCTAssertEqual(ExperimentalYVowelSettings.appliedCount(defaults: defaults), beforeApplied, "토글 OFF면 appliedCount가 늘면 안 됨")
+        XCTAssertEqual(ExperimentalYVowelSettings.conflictOverrideCount(defaults: defaults), beforeConflict)
     }
 }

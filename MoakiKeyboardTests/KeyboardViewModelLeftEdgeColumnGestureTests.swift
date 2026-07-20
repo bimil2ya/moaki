@@ -6,6 +6,7 @@ import XCTest
 /// inputVowel을 직접 호출하면 gestureStarted가 column에 따라
 /// gestureAnalyzer.reset(upSectorExpansionDegrees:)를 호출하는 실제 배선을 건너뛰어
 /// 이 보정이 KeyboardViewModel에 제대로 연결됐는지 검증하지 못한다.
+@MainActor
 final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
 
     private func performSingleDrag(on viewModel: KeyboardViewModel, row: Int, column: Int, angleDegrees: Double, magnitude: CGFloat = 40) {
@@ -18,7 +19,10 @@ final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
     }
 
     func testLeftEdgeColumnDriftedUpAngleProducesO() {
-        let viewModel = KeyboardViewModel()
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -28,7 +32,10 @@ final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
     }
 
     func testNonLeftEdgeColumnSameDriftedAngleStillProducesI() {
-        let viewModel = KeyboardViewModel()
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -38,7 +45,10 @@ final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
     }
 
     func testLeftEdgeColumnExactDownAngleStillProducesU() {
-        let viewModel = KeyboardViewModel()
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -50,7 +60,10 @@ final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
     /// 트레이드오프 문서화: 확장으로 좁아진 upRight 유효 범위(30..<60) 안에서는
     /// 명확한 대각선 의도가 여전히 ㅣ로 인식되어야 한다.
     func testLeftEdgeColumnClearDiagonalIntentStillProducesI() {
-        let viewModel = KeyboardViewModel()
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -64,7 +77,10 @@ final class KeyboardViewModelLeftEdgeColumnGestureTests: XCTestCase {
     /// 제스처를 이어서 수행해도 확장값이 새면 안 된다. reset(upSectorExpansionDegrees:)가
     /// 매번 저장값을 확실히 덮어쓰지 못하면(예: 조건부 대입) 이 테스트가 실패한다.
     func testExpansionDoesNotLeakToSubsequentGestureOnDifferentColumn() {
-        let viewModel = KeyboardViewModel()
+        let viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 

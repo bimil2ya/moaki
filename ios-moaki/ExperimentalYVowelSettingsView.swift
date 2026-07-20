@@ -5,9 +5,9 @@ import SwiftUI
 /// 반드시 동일하게 유지한다(키보드 익스텐션과 호스트 앱은 별도 프로세스라 코드를
 /// 공유하지 못하고 이렇게 나뉘어 있다).
 struct ExperimentalYVowelSettingsView: View {
-    private let enabledKey = "experimentalYVowelEnabled"
-    private let appliedCountKey = "experimentalYVowelAppliedCount"
-    private let conflictOverrideCountKey = "experimentalYVowelConflictOverrideCount"
+    static let enabledKey = "experimentalYVowelEnabled"
+    static let appliedCountKey = "experimentalYVowelAppliedCount"
+    static let conflictOverrideCountKey = "experimentalYVowelConflictOverrideCount"
 
     @State private var isEnabled = false
     @State private var appliedCount = 0
@@ -28,7 +28,7 @@ struct ExperimentalYVowelSettingsView: View {
             Section("실험 기능") {
                 Toggle("Y계열 원점 복귀 인식", isOn: $isEnabled)
                     .onChange(of: isEnabled) { _, newValue in
-                        defaults?.set(newValue, forKey: enabledKey)
+                        defaults?.set(newValue, forKey: Self.enabledKey)
                     }
 
                 Text("이 토글은 다음 획부터 바로 반영됩니다. 반면 제스처 민감도 배율은 키보드를 껐다 켜야 반영되는 별개의 설정입니다 — 이 화면 토글을 바꿔도 민감도 설정 자체는 즉시 반영되지 않습니다.")
@@ -58,14 +58,14 @@ struct ExperimentalYVowelSettingsView: View {
     }
 
     private func load() {
-        isEnabled = defaults?.bool(forKey: enabledKey) ?? false
-        appliedCount = defaults?.integer(forKey: appliedCountKey) ?? 0
-        conflictOverrideCount = defaults?.integer(forKey: conflictOverrideCountKey) ?? 0
+        isEnabled = defaults?.bool(forKey: Self.enabledKey) ?? false
+        appliedCount = defaults?.integer(forKey: Self.appliedCountKey) ?? 0
+        conflictOverrideCount = defaults?.integer(forKey: Self.conflictOverrideCountKey) ?? 0
     }
 
     private func resetCounters() {
-        defaults?.set(0, forKey: appliedCountKey)
-        defaults?.set(0, forKey: conflictOverrideCountKey)
+        defaults?.set(0, forKey: Self.appliedCountKey)
+        defaults?.set(0, forKey: Self.conflictOverrideCountKey)
         appliedCount = 0
         conflictOverrideCount = 0
     }

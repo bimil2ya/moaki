@@ -1,12 +1,13 @@
 import XCTest
 
+@MainActor
 final class KeyboardViewModelHanjaTests: XCTestCase {
     private var viewModel: KeyboardViewModel!
     private var delegate: SpyKeyboardDelegate!
 
     override func setUp() {
         super.setUp()
-        viewModel = KeyboardViewModel()
+        viewModel = KeyboardViewModel(snippetsProvider: { [] })
         delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
     }

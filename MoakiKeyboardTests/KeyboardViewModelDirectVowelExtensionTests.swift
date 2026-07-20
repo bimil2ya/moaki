@@ -3,6 +3,7 @@ import XCTest
 /// 드래그로 만든 기본 모음(ㅏㅓㅗㅜ) 뒤에 천지인 "점(ㆍ)"을 누르면 Y계열(ㅑㅕㅛㅠ)로
 /// 바뀌는 단축 변환 테스트. 시간 제한이 아니라 "다음 입력이 정확히 점인지"라는 입력
 /// 순서로 동작하므로, 타이머 관련 검증은 순수 천지인 자동확정 회귀에 한정한다.
+@MainActor
 final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
 
     private struct DragCase {
@@ -37,7 +38,11 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
     /// 드래그로 ㅎ+오른쪽="하"를 만든 새 viewModel/delegate 쌍을 반환한다. 무효화
     /// 시나리오 테스트들이 공통으로 재사용한다.
     private func makeViewModelDraggedToHa() -> (KeyboardViewModel, SpyKeyboardDelegate) {
-        let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05)
+        let viewModel = KeyboardViewModel(
+            cheonjiinAutoCommitDelay: 0.05,
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
         performCardinalDrag(on: viewModel, row: 2, column: 5, dx: 40, dy: 0)
@@ -49,7 +54,11 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
     func testDragBasicVowelThenDotExtendsToYVariant() {
         for testCase in basicMappingCases {
             // 각 iteration마다 새 인스턴스 — 이전 케이스의 조합 상태·타이머가 남지 않게 한다.
-            let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05)
+            let viewModel = KeyboardViewModel(
+                cheonjiinAutoCommitDelay: 0.05,
+                experimentalYVowelEnabledProvider: { false },
+                experimentalYVowelRecorder: { _ in }
+            )
             let delegate = SpyKeyboardDelegate()
             viewModel.delegate = delegate
 
@@ -188,7 +197,11 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
 
     /// 겹모음(예: 과)은 매핑 표에 없으므로 점을 눌러도 불변이어야 한다.
     func testDiphthongDragThenDotDoesNotChangeResult() {
-        let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05)
+        let viewModel = KeyboardViewModel(
+            cheonjiinAutoCommitDelay: 0.05,
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -208,7 +221,11 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
     /// 점을 눌러도 불변이어야 한다.
     func testExperimentalYVowelConfirmedSyllableIsNotAffectedByDot() {
         let delegate = SpyKeyboardDelegate()
-        let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05, experimentalYVowelEnabledProvider: { true })
+        let viewModel = KeyboardViewModel(
+            cheonjiinAutoCommitDelay: 0.05,
+            experimentalYVowelEnabledProvider: { true },
+            experimentalYVowelRecorder: { _ in }
+        )
         viewModel.delegate = delegate
 
         // ㅂ 키(row:1, column:1) 위에서 오른쪽으로 왕복 — confirmedYVowel == .ㅑ로 확정되는 경로.
@@ -307,7 +324,11 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
     // 이유는 그 commitCurrent() 때문이지 여기 추가한 무효화 코드 때문이 아니다.)
 
     func testHanjaCandidatesUXRegressionDoesNotProduceExtendedComposingUpdate() {
-        let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05)
+        let viewModel = KeyboardViewModel(
+            cheonjiinAutoCommitDelay: 0.05,
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 
@@ -326,24 +347,12 @@ final class KeyboardViewModelDirectVowelExtensionTests: XCTestCase {
     }
 
     func testSnippetCandidatesUXRegressionDoesNotProduceExtendedComposingUpdate() {
-        let suite = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        let keys = ["snippet.ㅋ", "snippet.ㅌ", "snippet.ㅊ", "snippet.ㅍ", "snippet.extra"]
-        var existingValues: [String: Any] = [:]
-        var absentKeys: [String] = []
-        for key in keys {
-            if let value = suite?.object(forKey: key) {
-                existingValues[key] = value
-            } else {
-                absentKeys.append(key)
-            }
-        }
-        defer {
-            for (key, value) in existingValues { suite?.set(value, forKey: key) }
-            for key in absentKeys { suite?.removeObject(forKey: key) }
-        }
-        suite?.set("테스트문구", forKey: "snippet.ㅋ")
-
-        let viewModel = KeyboardViewModel(cheonjiinAutoCommitDelay: 0.05)
+        let viewModel = KeyboardViewModel(
+            cheonjiinAutoCommitDelay: 0.05,
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in },
+            snippetsProvider: { ["테스트문구"] }
+        )
         let delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
 

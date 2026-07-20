@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class KeyboardViewModelSpaceCursorMoveTests: XCTestCase {
     private var viewModel: KeyboardViewModel!
     private var delegate: SpyKeyboardDelegate!

@@ -6,8 +6,8 @@ import SwiftUI
 /// 코드를 공유하지 못하고 이렇게 나뉘어 있다).
 struct SnippetSettingsView: View {
     private let appGroupID = AppGroupConstants.appGroupID
-    private let extraSnippetsKey = "snippet.extra"
-    private let slots: [(label: String, key: String)] = [
+    static let extraSnippetsKey = "snippet.extra"
+    static let slots: [(label: String, key: String)] = [
         ("ㅋ 길게 누르면", "snippet.ㅋ"),
         ("ㅌ 길게 누르면", "snippet.ㅌ"),
         ("ㅊ 길게 누르면", "snippet.ㅊ"),
@@ -30,7 +30,7 @@ struct SnippetSettingsView: View {
             }
 
             Section("ㅋㅌㅊㅍ 롱프레스") {
-                ForEach(slots, id: \.key) { slot in
+                ForEach(Self.slots, id: \.key) { slot in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(slot.label)
                             .font(.caption)
@@ -67,10 +67,10 @@ struct SnippetSettingsView: View {
 
     private func loadValues() {
         guard let defaults else { return }
-        for slot in slots {
+        for slot in Self.slots {
             values[slot.key] = defaults.string(forKey: slot.key) ?? ""
         }
-        extraSnippets = defaults.stringArray(forKey: extraSnippetsKey) ?? []
+        extraSnippets = defaults.stringArray(forKey: Self.extraSnippetsKey) ?? []
     }
 
     private func binding(for key: String) -> Binding<String> {
@@ -94,7 +94,7 @@ struct SnippetSettingsView: View {
     }
 
     private func saveExtraSnippets() {
-        defaults?.set(extraSnippets, forKey: extraSnippetsKey)
+        defaults?.set(extraSnippets, forKey: Self.extraSnippetsKey)
     }
 }
 

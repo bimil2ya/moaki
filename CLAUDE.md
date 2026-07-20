@@ -153,11 +153,15 @@ ios-moaki/
 
 ## 문구 자동완성 / 제스처 민감도 / 실험적 Y계열 인식기
 
-세 기능 모두 `MoakiKeyboard/Utilities/`의 전용 저장소(`SnippetSettings`, `GestureSensitivitySettings`, `ExperimentalYVowelSettings`)가 App Group(`group.dev.nohkyeongho.moaki`) `UserDefaults(suiteName:)`를 직접 읽고 쓰며, 호스트 앱(`ios-moaki/`)의 대응 설정 화면(`SnippetSettingsView`, `GestureSensitivitySettingsView`, `ExperimentalYVowelSettingsView`)에서 편집한다 — 키보드 익스텐션과 호스트 앱이 별도 프로세스라 코드를 공유하지 못하므로, 앱 그룹 키 문자열은 양쪽에 동일하게 유지해야 한다.
+세 기능 모두 `MoakiKeyboard/Utilities/`의 전용 저장소(`SnippetSettings`, `GestureSensitivitySettings`, `ExperimentalYVowelSettings`)가 App Group(`group.dev.nohkyeongho.moaki`) `UserDefaults(suiteName:)`를 직접 읽고 쓰며, 호스트 앱(`ios-moaki/`)의 대응 설정 화면(`SnippetSettingsView`, `GestureSensitivitySettingsView`, `ExperimentalYVowelSettingsView`)에서 편집한다 — 키보드 익스텐션과 호스트 앱이 별도 프로세스라 코드를 공유하지 못하므로, 앱 그룹 키 문자열은 양쪽에 동일하게 유지해야 한다. 이 키 상수들은 양쪽에 각각 독립적으로 리터럴로 존재해 실제로 중복 선언돼 있다(공유 프레임워크 타깃은 아직 없음) — 두 타깃 간 100% 동기화를 보장하진 않지만, `MoakiKeyboardTests`와 `ios-moakiTests`(호스트 앱 테스트 타깃, `import Testing`/`@Test`/`#expect` 사용 — `MoakiKeyboardTests`의 XCTest와는 다른 컨벤션) 양쪽에 각자 자기 값을 고정 문자열과 대조하는 테스트를 둬서 어느 한쪽만 값이 실수로 바뀌어도 그쪽 테스트가 즉시 실패하게 한다.
 
 - **문구 자동완성**: ㅋㅌㅊㅍ 키 롱프레스로 등록된 문구를 바로 삽입한다(`inputLongPressNumber`가 이름과 달리 숫자와 문구 롱프레스를 모두 처리 — 실제로는 "롱프레스로 확정된 문자열을 그대로 삽입"이라는 동일 동작이기 때문). 기능행의 "문구" 버튼은 등록된 전체 목록을 `SnippetCandidateBar`로 보여준다.
 - **제스처 민감도**: `GestureSensitivitySettings.multiplier()`(0.7~1.5 clamp)가 `KeyboardMetrics.gestureThreshold` 등 모든 거리 임계값에 곱해진다. 설정 화면에서 바꿔도 이미 열려 있는 키보드 인스턴스에는 즉시 반영되지 않고, 키보드를 껐다 켜야 반영된다.
 - **실험적 Y계열(ㅑㅕㅛㅠ) 원점 복귀 인식기**: 기본 OFF. `GestureAnalyzer`가 좌표만으로 항상 계산하는 별도 상태머신(`confirmedYVowel`)이며, `KeyboardViewModel`이 토글이 켜져 있을 때만 이 값을 채택한다 — 토글이 꺼져 있어도 왕복 제스처로 Y계열을 만드는 기본 경로(`VowelPattern`의 3획 패턴, 예: ↑↓↑=ㅛ)는 항상 동작한다. 토글은 제스처 시작 시점에 한 번만 캐시되어(`isExperimentalYVowelEnabledForCurrentGesture`) 도중에 값이 바뀌어도 이미 진행 중인 제스처에는 영향이 없다.
+
+### 테스트에서 App Group 격리하기
+
+`KeyboardViewModel.init`은 실제 App Group을 읽고/쓰는 세 프로덕션 API(`ExperimentalYVowelSettings.isEnabled()`/`.recordApplied(wasConflictOverride:)`, `SnippetSettings.allSnippets()`)를 각각 기본값으로 하는 주입 지점을 갖는다 — `experimentalYVowelEnabledProvider`, `experimentalYVowelRecorder`, `snippetsProvider`. 테스트가 `gestureStarted`(내부적으로 항상 `experimentalYVowelEnabledProvider()`/`experimentalYVowelRecorder()`를 호출) 또는 `showSnippetCandidates()`(항상 `snippetsProvider()`를 호출)에 도달하는 `KeyboardViewModel` 인스턴스를 만들 때는, 이 provider들을 UUID 임시 `UserDefaults(suiteName:)`로 리디렉션한 클로저로 반드시 넘겨야 한다 — 그러지 않으면 인자를 하나도 안 주든(`KeyboardViewModel()`) 다른 인자만 주든(`cheonjiinAutoCommitDelay:` 등) 실제 기기/시뮬레이터의 App Group을 조용히 읽고(토글이 켜져 있으면 쓰기까지) 오염시킨다. `GestureSensitivitySettings.multiplier()`(제스처 민감도 배율)는 이 패턴에서 아직 예외다 — `GestureAnalyzer.init`의 기본 파라미터가 실제 App Group을 인자 없이 읽으며, 주입 지점이 없어 모든 `KeyboardViewModel` 생성이 읽기 전용으로 영향을 받는다(쓰기는 없어 영구 오염은 아님 — 후속 작업 대상).
 
 ## VoiceOver 접근성 모음 선택
 
@@ -190,5 +194,6 @@ xcodebuild test -scheme MoakiKeyboardTests -destination 'platform=iOS Simulator,
 
 - iOS 키보드 익스텐션은 제한된 메모리에서 동작
 - `KeyboardViewController`는 UIKit, 나머지는 SwiftUI
+- `KeyboardViewModel`은 `@MainActor`로 격리되어 있다 — `MoakiKeyboard`/`MoakiKeyboardTests` 타깃은 `ios-moaki`(호스트 앱)와 달리 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`가 설정돼 있지 않아, 명시적 어노테이션이 유일한 격리 수단이다. `deinit`은 Swift에서 항상 `nonisolated`라 `@MainActor` 격리 메서드를 호출할 수 없으므로, `KeyboardViewModel.deinit`은 `stopBackspaceRepeat()` 등을 호출하는 대신 그 본문(타이머 `invalidate()`)을 직접 인라인한다. `KeyboardViewModel`을 생성하거나 그 메서드를 호출하는 테스트 클래스는 `@MainActor`가 필요하다.
 - 다크모드 대응: `Color(.systemBackground)` 계열 사용
 - `insertText()` 호출 전 `flushCommittedText()`로 확정 텍스트 획득 필수

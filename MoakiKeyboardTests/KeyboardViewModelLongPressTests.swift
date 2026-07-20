@@ -1,12 +1,16 @@
 import XCTest
 
+@MainActor
 final class KeyboardViewModelLongPressTests: XCTestCase {
     private var viewModel: KeyboardViewModel!
     private var delegate: SpyKeyboardDelegate!
 
     override func setUp() {
         super.setUp()
-        viewModel = KeyboardViewModel()
+        viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
     }

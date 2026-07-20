@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 
 // ViewModel to handle keyboard logic
+@MainActor
 class KeyboardViewModel: ObservableObject {
     @Published var activeKey: (row: Int, column: Int)?
     @Published var previewVowel: Jungseong?
@@ -54,6 +55,9 @@ class KeyboardViewModel: ObservableObject {
     /// Y계열(ㅑㅕㅛㅠ) 원점 복귀 인식기(실험적 기능) 토글. 실제 설정을 기본값으로 읽되,
     /// 테스트에서는 고정 클로저를 주입해 UserDefaults/앱그룹 없이 ON/OFF를 검증한다.
     private let experimentalYVowelEnabledProvider: () -> Bool
+    /// 실험 카운터 기록. 실제 저장을 기본값으로 하되, 테스트에서는 임시 suite로
+    /// 리디렉션해 실제 App Group을 건드리지 않게 한다.
+    private let experimentalYVowelRecorder: (Bool) -> Void
     /// 제스처 시작 시점에 한 번만 캐시한다 — 미리보기와 최종 확정이 서로 다른 시점에
     /// 토글을 다시 읽어 어긋나는 일이 없도록, 한 제스처 내내 이 값만 참조한다.
     private var isExperimentalYVowelEnabledForCurrentGesture = false
@@ -90,17 +94,23 @@ class KeyboardViewModel: ObservableObject {
         backspaceRepeatInterval: TimeInterval = 0.08,
         cheonjiinAutoCommitDelay: TimeInterval = 0.45,
         experimentalYVowelEnabledProvider: @escaping () -> Bool = { ExperimentalYVowelSettings.isEnabled() },
+        experimentalYVowelRecorder: @escaping (Bool) -> Void = { ExperimentalYVowelSettings.recordApplied(wasConflictOverride: $0) },
         snippetsProvider: @escaping () -> [String] = { SnippetSettings.allSnippets() }
     ) {
         self.backspaceRepeatInitialDelay = backspaceRepeatInitialDelay
         self.backspaceRepeatInterval = backspaceRepeatInterval
         self.cheonjiinAutoCommitDelay = cheonjiinAutoCommitDelay
         self.experimentalYVowelEnabledProvider = experimentalYVowelEnabledProvider
+        self.experimentalYVowelRecorder = experimentalYVowelRecorder
         self.snippetsProvider = snippetsProvider
     }
 
     deinit {
-        stopBackspaceRepeat()
+        // deinit은 Swift에서 항상 nonisolated로 취급되어 @MainActor 격리 메서드인
+        // stopBackspaceRepeat()를 호출할 수 없다 — 그 본문을 그대로 인라인한다
+        // (Timer.invalidate()는 액터 격리와 무관한 Foundation API라 문제없다).
+        backspaceInitialDelayTimer?.invalidate()
+        backspaceRepeatTimer?.invalidate()
         cheonjiinAutoCommitTimer?.invalidate()
     }
 
@@ -519,7 +529,7 @@ class KeyboardViewModel: ObservableObject {
                         print("[ExperimentalYVowel] 충돌 발생 — 기존: \(String(describing: resolution.vowel)), 신규: \(String(describing: decision.vowel))")
                     }
                     #endif
-                    ExperimentalYVowelSettings.recordApplied(wasConflictOverride: decision.wasConflictOverride)
+                    experimentalYVowelRecorder(decision.wasConflictOverride)
                 }
                 if let vowel = decision.vowel {
                     inputVowel(vowel)

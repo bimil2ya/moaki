@@ -2,13 +2,17 @@ import XCTest
 
 /// VoiceOver 접근성 모음 선택 경로(드래그 제스처를 전혀 거치지 않는 별도 입력)가
 /// 기존 inputConsonant/inputVowel을 그대로 재사용해 올바른 음절을 조합하는지 확인한다.
+@MainActor
 final class KeyboardViewModelAccessibilityVowelTests: XCTestCase {
     private var viewModel: KeyboardViewModel!
     private var delegate: SpyKeyboardDelegate!
 
     override func setUp() {
         super.setUp()
-        viewModel = KeyboardViewModel()
+        viewModel = KeyboardViewModel(
+            experimentalYVowelEnabledProvider: { false },
+            experimentalYVowelRecorder: { _ in }
+        )
         delegate = SpyKeyboardDelegate()
         viewModel.delegate = delegate
     }
